@@ -1,0 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  /* Change your primary branding palette */
+  --color-farm-green: #c4c2a5;
+  --color-durian-yellow: #f59e0b;
+  
+  /* Change the default app font family */
+  --font-sans: 'Montserrat', system-ui, sans-serif;
+}
+
+/* You can also add standard global CSS overrides here */
+body {
+  background-color: #ffffff; /* Slate 950 fallback background */
+}
