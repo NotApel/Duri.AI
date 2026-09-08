@@ -48,7 +48,7 @@ export default function Settings() {
 
         {/* LOCAL APP CONFIGURATION SETTINGS */}
         <div className="lg:col-span-2">
-          <form onSubmit={handleSave} className="bg-gradient-to-bl from-green-500 to-green-700 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-5">
+          <form onSubmit={handleSave} className="bg-linear-to-bl from-green-500 to-green-700 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-5">
             <h3 className="text-lg font-bold text-slate-100 uppercase tracking-widest">System Parameters</h3>
             
             <div className="space-y-4">
