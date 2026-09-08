@@ -129,7 +129,7 @@ export default function AuthScreen({ onLoginSuccess }) {
 
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              Terminal Email Target
+              Email Address
             </label>
             <input
               type="email"
@@ -144,7 +144,7 @@ export default function AuthScreen({ onLoginSuccess }) {
           {mode !== "recover" && (
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Security Code Token
+                Password
               </label>
               <input
                 type="password"
@@ -187,7 +187,7 @@ export default function AuthScreen({ onLoginSuccess }) {
                 onClick={() => setMode("recover")}
                 className="hover:text-emerald-400 transition font-medium"
               >
-                Forgot Security Token?
+                Forgot Password?
               </button>
             </>
           ) : (
