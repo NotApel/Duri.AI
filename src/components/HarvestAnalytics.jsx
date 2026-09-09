@@ -123,7 +123,7 @@ export default function HarvestAnalytics() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
       </div>
     </div>
   );

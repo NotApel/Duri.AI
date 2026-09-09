@@ -13,7 +13,7 @@ export default function Settings() {
   return (
     <div className="space-y-8 max-w-5xl">
       <header>
-        <h1 className="text-3xl font-black tracking-tight text-white">System & Profile Settings</h1>
+        <h1 className="bg-linear-to-r from-green-400 to-green-600 text-white rounded justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black tracking-tight text-transparent">System & Profile Settings</h1>
         <p className="text-slate-400 text-sm mt-1">
           Manage administrator account information and local runtime parameters.
         </p>

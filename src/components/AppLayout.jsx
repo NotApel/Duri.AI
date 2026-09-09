@@ -24,7 +24,7 @@ export default function AppLayout() {
       <aside className="hidden md:flex flex-col w-64 bg-linear-to-tl from-green-900 to-green-600 border-r border-emerald-800/30 p-4 min-h-screen sticky top-0 h-screen">
         <div className="flex items-center space-x-2 mb-6 px-2">
           <span className="text-2xl">🌳</span>
-          <span className="text-xl font-bold tracking-wider text-emerald-400">DURI.AI</span>
+          <span className="text-xl font-bold tracking-wider text-neutral-100">DURI.AI</span>
         </div>
 
         <nav className="flex-1 space-y-1">
