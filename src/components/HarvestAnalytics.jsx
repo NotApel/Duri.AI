@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import HarvestChart from './HarvestChart';
 
 // Mock dataset tracking fruit drop validations within the 2m² patch
 const HARVEST_LOGS = [
@@ -48,7 +49,8 @@ export default function HarvestAnalytics() {
     // Mapping logs into data table format
     const tableBody = logs.map(log => [log.id, log.timestamp, log.node, log.status, log.weight]);
     
-    doc.autoTable({
+    // Execute autoTable as an explicit function pass
+    autoTable(doc, {
       startY: 40,
       head: [['Record ID', 'Timestamp', 'Sensor Node', 'Classification', 'Est. Weight']],
       body: tableBody,
@@ -63,12 +65,10 @@ export default function HarvestAnalytics() {
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="shadow-lg bold justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black tracking-tight text-white"
-          >
+          <h1 className="shadow-lg justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black text-white">
             Harvest Analytics & Logs
           </h1>
-          <p className="text-slate-900 text-sm mt-1"
-          >
+          <p className="text-slate-900 text-sm mt-1">
             Audit historical drops, export sensor data, and analyze classification states.
           </p>
         </div>
@@ -77,13 +77,13 @@ export default function HarvestAnalytics() {
         <div className="flex gap-2">
           <button 
             onClick={exportToCSV}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md cursor-pointer"
           >
             📥 Export CSV Spreadsheet
           </button>
           <button 
             onClick={exportToPDF}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md cursor-pointer"
           >
             📄 Generate PDF Summary
           </button>
@@ -123,7 +123,10 @@ export default function HarvestAnalytics() {
               ))}
             </tbody>
           </table>
-          </div>
+        </div>
+        <div className="p-4">
+          <HarvestChart data={logs} />
+        </div>
       </div>
     </div>
   );
