@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "author": "Anonymous maker",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 9.6,
+      "left": -71.96,
+      "rotate": 180,
+      "attrs": {}
+    },
+    { "type": "wokwi-led", "id": "led1", "top": -3.6, "left": -217, "attrs": { "color": "red" } },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 73.2,
+      "left": -197.8,
+      "attrs": { "color": "blue" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 205.55,
+      "left": -172.8,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 186.35,
+      "left": -172.8,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-mpu6050",
+      "id": "imu1",
+      "top": 99.82,
+      "left": 88.72,
+      "rotate": 270,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:GND.2", "imu1:GND", "cyan", [ "v-2.8", "h307.64" ] ],
+    [ "esp:3V3", "imu1:VCC", "magenta", [ "v74", "h221.09" ] ],
+    [ "esp:21", "imu1:SDA", "magenta", [ "h0" ] ],
+    [ "esp:22", "imu1:SCL", "magenta", [ "h0" ] ],
+    [ "esp:18", "led1:A", "red", [ "h-95.48", "v-79.6" ] ],
+    [ "led1:C", "r1:1", "blue", [ "h-18.8", "v211.2" ] ],
+    [ "r1:2", "esp:GND.2", "blue", [ "h46.28" ] ],
+    [ "esp:19", "led2:A", "red", [ "h0" ] ],
+    [ "led2:C", "r2:1", "blue", [ "v0" ] ],
+    [ "r2:2", "esp:GND.2", "blue", [ "h46.28" ] ]
+  ],
+  "dependencies": {}
+}
