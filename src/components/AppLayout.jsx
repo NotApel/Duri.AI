@@ -1,4 +1,3 @@
-import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
@@ -20,8 +19,8 @@ export default function AppLayout() {
     /* MAIN BACKGROUND (bg-yellow-100) */
     <div className="flex flex-col md:flex-row min-h-screen bg-yellow-100 text-slate-100 font-sans">
       
-      {/* DESKTOP SIDEBAR BACKGROUND (bg-linear-to-tl from-green-900 to-green-600) */}
-      <aside className="hidden md:flex flex-col w-64 bg-linear-to-tl from-green-900 to-green-600 border-r border-emerald-800/30 p-4 min-h-screen sticky top-0 h-screen">
+      {/* DESKTOP SIDEBAR */}
+      <aside className="shadow-md hidden md:flex flex-col w-64 bg-green-700 border-r border-emerald-800/30 p-4 min-h-screen sticky top-0 h-screen">
         <div className="flex items-center space-x-2 mb-6 px-2">
           <span className="text-2xl">🌳</span>
           <span className="text-xl font-bold tracking-wider text-neutral-100">DURI.AI</span>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Save, CheckCircle } from 'lucide-react';
 
 export default function Settings() {
@@ -13,7 +13,7 @@ export default function Settings() {
   return (
     <div className="space-y-8 max-w-5xl">
       <header>
-        <h1 className="bg-linear-to-r from-green-400 to-green-600 text-white rounded justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black tracking-tight text-transparent">System & Profile Settings</h1>
+        <h1 className="bg-green-800 text-white rounded justify-center tracking-wider border border-green-500 rounded-lg p-1 text-3xl font-black tracking-tight">System & Profile Settings</h1>
         <p className="text-slate-400 text-sm mt-1">
           Manage administrator account information and local runtime parameters.
         </p>
@@ -48,7 +48,7 @@ export default function Settings() {
 
         {/* LOCAL APP CONFIGURATION SETTINGS */}
         <div className="lg:col-span-2">
-          <form onSubmit={handleSave} className="bg-linear-to-bl from-green-500 to-green-700 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-5">
+          <form onSubmit={handleSave} className="bg-green-700 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-5">
             <h3 className="text-lg font-bold text-slate-100 uppercase tracking-widest">System Parameters</h3>
             
             <div className="space-y-4">
