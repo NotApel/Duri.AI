@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polygon } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -45,8 +45,10 @@ export default function OrchardMap() {
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="bg-linear-to-r from-green-400 to-green-600 text-white rounded justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black tracking-tight text-transparent">Real-Time Orchard Map</h1>
-          <p className="text-slate-400 text-sm mt-1">Live grid positioning, multi-sensor nodes, and drop alert validations.</p>
+          <h1 className="bg-green-500 text-white justify-center tracking-wider rounded-lg p-1 text-3xl font-black shadow-md">
+            Real-Time Orchard Map</h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Live grid positioning, multi-sensor nodes, and drop alert validations.</p>
         </div>
         <div className="flex gap-2">
           <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-xl font-medium">

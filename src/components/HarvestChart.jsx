@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   AreaChart, 
   Area, 
@@ -21,15 +20,15 @@ const harvestData = [
   { day: 'Sun', drops: 9, weight: 18.2 },
 ];
 
-export default function HarvestChart({ setCurrentView }) {
+export default function HarvestChart() {
   return (
     <div className="bg-yellow-50 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4">
       <div className="flex justify-between items-center border-b border-slate-800 pb-3">
         <div>
-          <h3 className="text-xl font-bold text-neutral-800">Weekly Yield Trends</h3>
-          <p className="text-xs text-slate-900">Durian drop count over the last 7 days</p>
+          <h3 className="text-xl font-bold text-neutral-800">Weekly Yield Trends (Demo)</h3>
+          <p className="text-xs text-slate-900">Sample durian drop counts, not live orchard data</p>
         </div>
-        <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold">
+        <span className="text-xs bg-emerald-500/10 text-green-700 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold">
           +24% vs last week
         </span>
       </div>

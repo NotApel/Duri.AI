@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 // Live mock dataset matching your Raspberry Pi Zero 2 W infrastructure
 const INITIAL_HARDWARE = [
@@ -25,8 +25,8 @@ export default function NodeManagement() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="bg-gradient-to-r from-green-400 to-green-600 text-white rounded justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black tracking-tight text-transparent">System & Node Management</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <h1 className="bg-green-800 text-white rounded justify-center tracking-wider border border-green-500 p-1 text-3xl font-black">System & Node Management</h1>
+        <p className="text-slate-300 text-sm mt-1">
           Monitor active Raspberry Pi microcontrollers, track battery levels, and push edge model updates.
         </p>
       </header>

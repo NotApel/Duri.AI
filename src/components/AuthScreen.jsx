@@ -1,5 +1,5 @@
 // src/components/AuthScreen.jsx
-import React, { useState } from "react";
+import { useState } from "react";
 import { registerFarmer, loginFarmer } from "../services/api";
 
 export default function AuthScreen({ onLoginSuccess }) {
@@ -20,7 +20,7 @@ export default function AuthScreen({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const data = await registerFarmer({
+      await registerFarmer({
         full_name: fullName,
         email,
         password_hash: password,
@@ -49,7 +49,7 @@ export default function AuthScreen({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const data = await loginFarmer(email, password);
+      await loginFarmer(email, password);
       setSuccessMessage("Login successful!");
       // Call the onLoginSuccess prop to navigate to dashboard
       if (onLoginSuccess) {

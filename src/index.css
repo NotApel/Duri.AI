@@ -1,16 +1,64 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Plaster&display=swap');
 @import "tailwindcss";
 
-:root {
-  /* Change your primary branding palette */
-  --color-farm-green: #c4c2a5;
-  --color-durian-yellow: #f59e0b;
-  
-  /* Change the default app font family */
-  --font-sans: 'Montserrat', system-ui, sans-serif;
+@theme {
+  --font-sans: 'Fredoka', sans-serif;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+  --color-farm-green: #306d29;
+  --color-durian-yellow: #e7e1b1;
+  --color-green-400: #8eb178;
+  --color-green-500: #306d29;
+  --color-green-600: #286223;
+  --color-green-700: #20581d;
+  --color-green-800: #174b18;
+  --color-green-900: #0d530e;
+  --color-green-950: #0a340d;
+  --color-emerald-100: #e7e1b1;
+  --color-emerald-400: #b2d18e;
+  --color-emerald-500: #629b4f;
+  --color-emerald-600: #306d29;
+  --color-emerald-800: #20581d;
+  --color-emerald-900: #164618;
+  --color-emerald-950: #0a340d;
+  --color-yellow-50: #fbf5dd;
+  --color-yellow-100: #0d530e;
+  --color-amber-400: #d7981a;
+  --color-amber-500: #bd8015;
+  --color-blue-400: #9dbd83;
+  --color-blue-500: #618c58;
+  --color-rose-300: #ffd3a9;
+  --color-rose-400: #f2ae77;
+  --color-rose-500: #d97745;
+  --color-rose-900: #713f28;
+  --color-rose-950: #3c241b;
+  --color-slate-100: #fbf5dd;
+  --color-slate-200: #e7e1b1;
+  --color-slate-300: #d0d8ba;
+  --color-slate-400: #b9c9ad;
+  --color-slate-500: #819b7b;
+  --color-slate-700: #345b37;
+  --color-slate-800: #23482a;
+  --color-slate-900: #173b20;
+  --color-slate-950: #0d2c17;
 }
 
-/* You can also add standard global CSS overrides here */
+:root {
+  --color-cream: #fbf5dd;
+  --color-muted-cream: #e7e1b1;
+  --color-orchard: #306d29;
+  --color-deep-orchard: #0d530e;
+  --color-ink: #fbf5dd;
+}
+
 body {
-  background-color: #ffffff; /* Slate 950 fallback background */
+  font-family: var(--font-sans);
+  background-color: var(--color-deep-orchard);
+  color: var(--color-ink);
 }

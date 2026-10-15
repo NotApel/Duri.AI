@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
@@ -63,12 +63,11 @@ export default function HarvestAnalytics() {
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="shadow-lg bold justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black tracking-tight text-white"
+          <h1 className="shadow-lg bold justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-green-700 text-3xl font-black text-white"
           >
             Harvest Analytics & Logs
           </h1>
-          <p className="text-slate-900 text-sm mt-1"
-          >
+          <p className="text-slate-200 text-sm mt-1">
             Audit historical drops, export sensor data, and analyze classification states.
           </p>
         </div>
@@ -91,10 +90,10 @@ export default function HarvestAnalytics() {
       </header>
 
       {/* HISTORICAL LOG TRACKING TABLE */}
-      <div className="bg-gradient-to-br from-green-900 to-green-950 border border-slate-700/60 rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-green-900 border border-slate-700/60 rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm text-slate-300">
-            <thead className="bg-gradient-to-r from-green-800 to-green-900 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-700/50">
+            <thead className="bg-green-800 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-700/50">
               <tr>
                 <th className="p-4">Record ID</th>
                 <th className="p-4">Timestamp</th>

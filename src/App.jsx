@@ -1,12 +1,14 @@
 // src/App.jsx
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import AuthScreen from "./components/AuthScreen";
 import AppLayout from "./components/AppLayout";
-import DashboardHome from "./components/DashboardHome";
-import OrchardMap from "./components/OrchardMap";
-import HarvestAnalytics from "./components/HarvestAnalytics";
-import NodeManagement from "./components/NodeManagement";
-import Settings from "./components/Settings";
+
+const DashboardHome = lazy(() => import("./components/DashboardHome"));
+const OrchardMap = lazy(() => import("./components/OrchardMap"));
+const HarvestAnalytics = lazy(() => import("./components/HarvestAnalytics"));
+const NodeManagement = lazy(() => import("./components/NodeManagement"));
+const Settings = lazy(() => import("./components/Settings"));
 
 // Wrapper to pass onLoginSuccess to AuthScreen
 function AuthWrapper() {
@@ -22,6 +24,7 @@ function AuthWrapper() {
 function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<div className="min-h-screen bg-green-900 p-6 text-slate-100">Loading page…</div>}>
       <Routes>
         {/* Auth routes */}
         <Route path="/" element={<AuthWrapper />} />
@@ -37,6 +40,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

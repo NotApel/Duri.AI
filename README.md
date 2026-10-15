@@ -59,6 +59,10 @@ Progressive Web App
 - Interactive orchard map
 - Self-learning feedback loop
 
+## Local dashboard configuration
+
+Copy `.env.example` to `.env.local` and set `VITE_PLOT_ID` to an existing plot ID. The Vite development server proxies `/api` to the local backend on port 3000. For a separately hosted backend, set `VITE_API_URL` to its API base URL. The dashboard shows verified totals from the analytics endpoint and recent per-node detections; the weekly chart is sample data.
+
 ## 🧪 Testing
 
 - Unit Testing
