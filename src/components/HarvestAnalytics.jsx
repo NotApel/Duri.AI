@@ -1,68 +1,36 @@
-import React, { useState } from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import HarvestChart from './HarvestChart';
-
-// Mock dataset tracking fruit drop validations within the 2m² patch
-const HARVEST_LOGS = [
-  { id: 'TRK-901', timestamp: '2026-06-17 08:32', node: 'NODE-03', status: 'Correct Fall', weight: '1.8kg' },
-  { id: 'TRK-902', timestamp: '2026-06-17 11:15', node: 'NODE-03', status: 'Correct Fall', weight: '2.1kg' },
-  { id: 'TRK-903', timestamp: '2026-06-16 14:02', node: 'NODE-01', status: 'Correct Fall', weight: '1.5kg' },
-  { id: 'TRK-904', timestamp: '2026-06-15 03:40', node: 'NODE-02', status: 'False Alarm: Animal', weight: '0.0kg' },
-  { id: 'TRK-905', timestamp: '2026-06-14 19:11', node: 'NODE-01', status: 'Correct Fall', weight: '2.4kg' },
-];
+import { useParams } from "react-router-dom";
+import Detections from "./Detections";
+import HarvestChart from "./HarvestChart";
 
 export default function HarvestAnalytics() {
-  const [logs] = useState(HARVEST_LOGS);
-
-  // 1. EXPORT TO SPREADSHEET FUNCTION (CSV)
-  const exportToCSV = () => {
-    const headers = ['Record ID,Timestamp,Sensor Node,Classification,Estimated Weight\n'];
-    const rows = logs.map(log => 
-      `${log.id},${log.timestamp},${log.node},${log.status},${log.weight}`
-    );
-    
-    const csvContent = "data:text/csv;charset=utf-8," + headers.concat(rows).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `DuriAI_Harvest_Report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // 2. EXPORT TO DOCUMENT FUNCTION (PDF)
-  const exportToPDF = () => {
-    const doc = new jsPDF();
-    
-    // Document Branding Headers
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text("DURI.AI HARVEST INTELLIGENCE REPORT", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 27);
-    doc.text("Target Grid Center: 2.931086, 101.798198 (2m² Plot Area)", 14, 32);
-    
-    // Mapping logs into data table format
-    const tableBody = logs.map(log => [log.id, log.timestamp, log.node, log.status, log.weight]);
-    
-    // Execute autoTable as an explicit function pass
-    autoTable(doc, {
-      startY: 40,
-      head: [['Record ID', 'Timestamp', 'Sensor Node', 'Classification', 'Est. Weight']],
-      body: tableBody,
-      headStyles: { fillColor: [6, 95, 70] }, // Dark Emerald matching farm brand
-      theme: 'striped'
-    });
-
-    doc.save(`DuriAI_Harvest_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-  };
-
+  const { eventId } = useParams();
   return (
     <div className="space-y-6">
+
+      <header>
+        <h1 className="text-3xl font-bold text-emerald-950">
+          Harvest Analytics &amp; Logs
+        </h1>
+        <p className="mt-2 text-sm text-slate-700">
+          Search event history, revisit farmer feedback, and export the filtered
+          simulation records.
+        </p>
+      </header>
+      <Detections mode="history" />
+      {!eventId && (
+        <section
+          aria-label="Sample analytics"
+          className="rounded-xl border border-emerald-900/20 bg-amber-50 p-4"
+        >
+          <p className="mb-3 text-sm text-amber-950">
+            <strong>Sample chart:</strong> the existing weekly chart is
+            illustrative only. Its values are not calculated from detection
+            history or farmer feedback.
+          </p>
+          <HarvestChart />
+        </section>
+      )}
+
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="shadow-lg justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-linear-to-r from-green-800 to-green-500 text-3xl font-black text-white">
@@ -128,6 +96,7 @@ export default function HarvestAnalytics() {
           <HarvestChart data={logs} />
         </div>
       </div>
+
     </div>
   );
 }

@@ -27,7 +27,6 @@ export default function AppLayout() {
         </div>
 
         <nav className="flex-1 space-y-1">
-          <NavLink to="/detections" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-lg font-semibold text-sm ${isActive ? "bg-emerald-800 text-white" : "text-white hover:bg-emerald-900/40"}`}><ClipboardList className="w-5 h-5" />Detections</NavLink>
           <NavLink
             to="/dashboard"
             className={({ isActive }) =>
@@ -59,7 +58,7 @@ export default function AppLayout() {
             }
           >
             <ClipboardList className="w-5 h-5" />
-            Analytics
+            Harvest Logs
           </NavLink>
           <NavLink
             to="/nodes"
@@ -119,7 +118,6 @@ export default function AppLayout() {
 
       {/* MOBILE BOTTOM NAV BACKGROUND (bg-emerald-950/95) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-emerald-950/95 backdrop-blur-md border-t border-emerald-900/40 flex justify-around items-center py-2 px-1 z-50 shadow-lg">
-        <NavLink to="/detections" className={({ isActive }) => `flex flex-col items-center justify-center min-h-12 px-2 text-[10px] ${isActive ? "text-emerald-300 font-bold" : "text-slate-200"}`}><ClipboardList className="w-5 h-5" /><span>Detections</span></NavLink>
         <NavLink
           to="/dashboard"
           className={({ isActive }) =>
@@ -151,7 +149,7 @@ export default function AppLayout() {
           }
         >
           <ClipboardList className="w-5 h-5" />
-          <span>Analytics</span>
+          <span>Logs</span>
         </NavLink>
         <NavLink
           to="/nodes"
