@@ -130,11 +130,22 @@ Shared colors, spacing, navigation, and form/table classes live in `src/index.cs
 detection-specific styles remain in `src/components/Detections.css`. No new UI
 framework or dependency is required.
 
-The dashboard reads the existing backend APIs and displays loading, retry, and
-empty states without invented node readings, orchard area, or sample yield charts.
+The dashboard opens in labelled simulation mode with populated nodes, recent
+events, and the original sample weekly chart for presentations. Choose Backend
+in Data source to read the existing APIs, with loading, retry, and empty states.
+Simulation and backend records are kept separate.
 Node updates and settings remain explicitly local demonstrations. Password recovery
 shows its unavailable state rather than submitting a login request.
 
 UI validation includes Chromium checks at 320px, 390px, and 1440px for all six
 screens; login and dashboard requests are mocked during browser checks. These
 checks validate frontend interactions, not production authentication or hardware.
+
+
+If the app appears blank locally, share the browser console error and the page URL.
+For dependency/cache issues after pulling, stop Vite, run `npm ci`, then
+`npm run dev -- --force` and open the exact URL Vite prints. This project’s Vite
+version requires Node 20.19+ or 22.12+ (Node 24 was tested). Unknown routes show a
+Page not found screen; React rendering errors show a reload screen and log the
+underlying error to the console. These fallbacks do not fix missing dependencies
+or a dev server that cannot start.

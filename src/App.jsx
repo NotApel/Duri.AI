@@ -6,6 +6,7 @@ import {
   Navigate,
   useNavigate,
   useParams,
+  Link,
 } from "react-router-dom";
 import AuthScreen from "./components/AuthScreen";
 import AppLayout from "./components/AppLayout";
@@ -57,6 +58,20 @@ function App() {
           />
           <Route path="/nodes" element={<NodeManagement />} />
           <Route path="/settings" element={<Settings />} />
+          <Route
+            path="*"
+            element={
+              <section className="ui-panel">
+                <h1>Page not found</h1>
+                <p className="my-4">
+                  This address doesn’t match a Duri.AI screen.
+                </p>
+                <Link className="ui-button primary" to="/dashboard">
+                  Open dashboard
+                </Link>
+              </section>
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>
