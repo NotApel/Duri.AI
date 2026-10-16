@@ -53,7 +53,7 @@ function App() {
           <Route path="/analytics" element={<HarvestAnalytics />} />
           <Route
             path="/analytics/events/:eventId"
-            element={<HarvestAnalytics />}
+            element={<LegacyDetectionRedirect />}
           />
           <Route path="/nodes" element={<NodeManagement />} />
           <Route path="/settings" element={<Settings />} />
