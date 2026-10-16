@@ -1,14 +1,18 @@
 /* Shared app styles are imported directly by App.jsx, independently of Tailwind. */
 :root {
   --font-sans: "Montserrat", system-ui, sans-serif;
-  --color-farm-green: #204d36;
-  --color-durian-yellow: #f59e0b;
-  --ui-bg: #f7f8f2;
-  --ui-surface: #fffdf3;
-  --ui-green: #204d36;
-  --ui-ink: #29382d;
-  --ui-muted: #52614c;
-  --ui-border: #d5d9c4;
+  --color-farm-green: #37583a;
+  --color-durian-yellow: #ffdc83;
+  --ui-bg: color-mix(in srgb, #ffdc83 14%, white);
+  --ui-surface: color-mix(in srgb, #ffdc83 6%, white);
+  --ui-green: #37583a;
+  --ui-secondary: #6f864f;
+  --ui-olive: #b6b265;
+  --ui-gold: #ffdc83;
+  --ui-tint: color-mix(in srgb, var(--ui-olive) 20%, white);
+  --ui-ink: color-mix(in srgb, #37583a 75%, black);
+  --ui-muted: #37583a;
+  --ui-border: color-mix(in srgb, #b6b265 55%, white);
   font-family: var(--font-sans);
   color: var(--ui-ink);
   background: var(--ui-bg);
@@ -61,9 +65,9 @@ h3 {
   width: 240px;
   flex-shrink: 0;
   background: var(--ui-green);
-  color: #fffdf3;
+  color: var(--ui-gold);
   padding: 24px 16px;
-  border-right: 1px solid #163b28;
+  border-right: 1px solid var(--ui-secondary);
   display: flex;
   flex-direction: column;
 }
@@ -91,14 +95,15 @@ h3 {
   text-decoration: none;
   font-weight: 500;
   border-radius: 6px;
-  color: #fffdf3;
+  color: var(--ui-gold);
   transition: background-color 150ms ease;
 }
 .app-nav-link:hover {
-  background: #ffffff12;
+  background: color-mix(in srgb, var(--ui-green) 75%, var(--ui-secondary));
 }
 .app-nav-link.active {
-  background: #ffffff20;
+  background: var(--ui-gold);
+  color: var(--ui-green);
   font-weight: 700;
 }
 .app-logout {
@@ -108,8 +113,8 @@ h3 {
   gap: 12px;
   padding: 12px;
   cursor: pointer;
-  color: #fffdf3;
-  border-top: 1px solid #ffffff30;
+  color: var(--ui-gold);
+  border-top: 1px solid var(--ui-secondary);
   min-height: 44px;
   text-align: left;
 }
@@ -172,7 +177,7 @@ h3 {
   justify-content: center;
   min-height: 44px;
   padding: 8px 16px;
-  border: 1px solid #a3af98;
+  border: 1px solid var(--ui-secondary);
   border-radius: 6px;
   background: var(--ui-surface);
   color: var(--ui-green);
@@ -181,7 +186,7 @@ h3 {
   font-weight: 600;
 }
 .ui-button:hover {
-  background: #edf0e3;
+  background: var(--ui-tint);
 }
 .ui-button.primary {
   background: var(--ui-green);
@@ -205,9 +210,9 @@ h3 {
   min-height: 44px;
   padding: 8px 12px;
   color: var(--ui-ink);
-  border: 1px solid #a3af98;
+  border: 1px solid var(--ui-secondary);
   border-radius: 6px;
-  background: #fffdf8;
+  background: var(--ui-surface);
 }
 .ui-field input[type="checkbox"] {
   width: 20px;
@@ -219,16 +224,16 @@ h3 {
   gap: 20px;
 }
 .ui-notice {
-  background: #edf0e3;
+  background: var(--ui-tint);
   border: 1px solid var(--ui-border);
   color: var(--ui-ink);
   padding: 12px 16px;
   border-radius: 6px;
 }
 .ui-error {
-  background: #f9e8e2;
-  color: #7d312d;
-  border-color: #d3aaa1;
+  background: color-mix(in srgb, var(--ui-gold) 35%, white);
+  color: var(--ui-green);
+  border-color: var(--ui-olive);
 }
 .ui-muted {
   color: var(--ui-muted);
@@ -247,7 +252,7 @@ h3 {
 .ui-table th {
   font-weight: 600;
   color: var(--ui-green);
-  background: #edf0e3;
+  background: var(--ui-tint);
 }
 .ui-table th,
 .ui-table td {
@@ -259,7 +264,7 @@ h3 {
   border-bottom: 0;
 }
 .ui-table tbody tr:hover {
-  background: #f5f6eb;
+  background: color-mix(in srgb, var(--ui-gold) 15%, white);
 }
 .ui-table code {
   font: inherit;
@@ -346,7 +351,7 @@ h3 {
     justify-content: space-between;
     padding: 12px 16px;
     background: var(--ui-green);
-    color: #fffdf3;
+    color: var(--ui-gold);
   }
   .app-mobile-header .ui-button {
     padding: 6px 12px;

@@ -28,7 +28,7 @@ export default function OrchardMap() {
     <div className="space-y-6">
       <header>
         <h1>Orchard Map</h1>
-        <p className="mt-2 text-sm text-slate-700">
+        <p className="mt-2 text-sm ui-muted">
           Review detections and farmer feedback alongside your orchard view.
         </p>
       </header>
@@ -40,7 +40,7 @@ export default function OrchardMap() {
             have no GPS and are not plotted. Map tiles require an internet
             connection.
           </p>
-          <div className="h-[38vh] min-h-64 overflow-hidden rounded-lg border border-emerald-900/20 relative z-0">
+          <div className="h-[38vh] min-h-64 overflow-hidden rounded-lg border border-[var(--ui-border)] relative z-0">
             <MapContainer
               center={ORCHARD_CENTER}
               zoom={20}
@@ -54,7 +54,7 @@ export default function OrchardMap() {
               />
               <Polygon
                 positions={PLOT_BOUNDARY}
-                pathOptions={{ color: "#204d36", fillOpacity: 0.12 }}
+                pathOptions={{ color: "#37583a", fillOpacity: 0.12 }}
               />
               {SAMPLE_NODES.map((node) => (
                 <CircleMarker
@@ -62,8 +62,8 @@ export default function OrchardMap() {
                   center={node.position}
                   radius={8}
                   pathOptions={{
-                    color: "#204d36",
-                    fillColor: "#c4d890",
+                    color: "#37583a",
+                    fillColor: "#ffdc83",
                     fillOpacity: 1,
                   }}
                 >

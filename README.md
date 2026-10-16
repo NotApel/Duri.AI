@@ -152,3 +152,6 @@ version requires Node 20.19+ or 22.12+ (Node 24 was tested). Unknown routes show
 Page not found screen; React rendering errors show a reload screen and log the
 underlying error to the console. These fallbacks do not fix missing dependencies
 or a dev server that cannot start.
+
+The shared UI palette uses `#37583a` (primary green), `#6f864f` (secondary green),
+`#b6b265` (olive), and `#ffdc83` (gold), with light surface tints for legibility.

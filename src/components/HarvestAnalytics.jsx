@@ -88,7 +88,7 @@ export default function HarvestAnalytics() {
     <section className="detections ui-page">
       <header>
         <h1>Harvest Logs</h1>
-        <p className="mt-2 text-sm text-slate-700">
+        <p className="mt-2 text-sm ui-muted">
           Detection records by date, time, detection type, and sensor node.
         </p>
       </header>

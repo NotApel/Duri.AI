@@ -38,7 +38,7 @@
 .d-demo {
   display: flex;
   gap: 12px;
-  background: #edf0e3;
+  background: var(--ui-tint);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 12px 16px;
@@ -115,7 +115,7 @@
 .detections textarea {
   display: block;
   width: 100%;
-  border: 1px solid #a3af98;
+  border: 1px solid var(--ui-secondary);
   background: var(--cream);
   color: var(--soil);
   border-radius: 7px;
@@ -125,7 +125,7 @@
 }
 .d-caption {
   font-size: 12px;
-  color: #52614c;
+  color: var(--ui-muted);
 }
 .d-list {
   display: grid;
@@ -171,28 +171,28 @@
   font-weight: 700;
   border-radius: 5px;
   padding: 5px 9px;
-  background: #ece6cf;
-  color: #614c19;
+  background: var(--ui-gold);
+  color: var(--ui-green);
 }
 .d-verified {
-  background: #dcebd7;
-  color: #234d2c;
+  background: var(--ui-tint);
+  color: var(--ui-green);
 }
 .d-rejected {
-  background: #eee0d6;
-  color: #704426;
+  background: color-mix(in srgb, var(--ui-olive) 35%, white);
+  color: var(--ui-green);
 }
 .d-failed {
-  background: #f3dbd7;
-  color: #7d312d;
+  background: color-mix(in srgb, var(--ui-gold) 50%, white);
+  color: var(--ui-green);
 }
 .d-verifying {
-  background: #e6eadb;
-  color: #455435;
+  background: var(--ui-tint);
+  color: var(--ui-green);
 }
 .d-empty {
   background: var(--cream);
-  border: 1px dashed #a3af98;
+  border: 1px dashed var(--ui-secondary);
   padding: 40px 20px;
   text-align: center;
   border-radius: 8px;
@@ -230,8 +230,8 @@
   margin: 15px 0;
 }
 .d-camera {
-  background: #edf0e3;
-  border: 1px solid #cbd2bd;
+  background: var(--ui-tint);
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
   min-height: 210px;
   display: flex;
@@ -256,7 +256,7 @@
 }
 .d-facts dt {
   font-size: 12px;
-  color: #52614c;
+  color: var(--ui-muted);
 }
 .d-facts dd {
   margin: 3px 0;
@@ -305,7 +305,7 @@
   height: 18px;
 }
 .d-selected {
-  background: #e8efdc;
+  background: var(--ui-tint);
   border-color: var(--canopy);
 }
 .d-field {
@@ -328,18 +328,18 @@
 .d-success,
 .d-error {
   padding: 13px;
-  border: 1px solid #b9c89b;
+  border: 1px solid var(--ui-olive);
   border-radius: 8px;
-  background: #edf1df;
+  background: var(--ui-tint);
   font-size: 13px;
 }
 .d-error {
-  background: #f9e8e2;
-  border-color: #c58e82;
-  color: #7d312d;
+  background: color-mix(in srgb, var(--ui-gold) 35%, white);
+  border-color: var(--ui-olive);
+  color: var(--ui-green);
 }
 .d-success {
-  background: #e3efdc;
+  background: var(--ui-tint);
 }
 .d-feedback textarea {
   resize: vertical;

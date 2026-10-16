@@ -37,26 +37,26 @@ export default function HarvestChart() {
             margin={{ top: 12, right: 16, left: -20, bottom: 8 }}
           >
             <CartesianGrid
-              stroke="#d5d9c4"
+              stroke="#b6b265"
               strokeDasharray="3 3"
               vertical={false}
             />
-            <XAxis dataKey="day" stroke="#52614c" fontSize={12} />
-            <YAxis allowDecimals={false} stroke="#52614c" fontSize={12} />
+            <XAxis dataKey="day" stroke="#37583a" fontSize={12} />
+            <YAxis allowDecimals={false} stroke="#37583a" fontSize={12} />
             <Tooltip
               contentStyle={{
-                background: "#fffdf3",
-                border: "1px solid #d5d9c4",
+                background: "var(--ui-surface)",
+                border: "1px solid #b6b265",
                 borderRadius: 6,
-                color: "#29382d",
+                color: "#37583a",
               }}
             />
             <Area
               type="monotone"
               dataKey="drops"
               name="Sample drops"
-              stroke="#204d36"
-              fill="#dce6cf"
+              stroke="#37583a"
+              fill="#b6b265"
               strokeWidth={2}
               isAnimationActive={false}
             />
