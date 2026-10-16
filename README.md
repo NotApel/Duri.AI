@@ -77,7 +77,7 @@ This project is developed as a Final Year Project (FYP) at the German-Malaysian 
 
 Run `npm ci` and `npm run dev` from the repository root. Open the application at
 `/map` (select **Orchard Map**) for current detections, or `/analytics`
-(select **Harvest Logs**, labelled **Logs** on mobile) for searchable history. This
+(select **Harvest Logs**, labelled **Logs** on mobile) for a simple three-column log. This
 presentation workflow does not require the backend or a successful login; it is
 not an authenticated production feature.
 
@@ -88,7 +88,7 @@ not an authenticated production feature.
   No camera images or GPS coordinates are fabricated.
 - Submit Confirm durian, False alarm (with category), or Unsure. Optional notes
   are limited to 500 characters. Feedback is stored only in this browser under
-  `duriai.simulation.feedback.v1`; refresh and use Reviewed history to find it.
+  `duriai.simulation.feedback.v1`; revisit the event in Orchard Map to find it.
   Revisions replace the demo response, not the original system evidence.
 - Offline indicators describe local fixtures only. Nothing syncs to a server;
   no notification, inference, model training, or hardware update is performed.
@@ -104,8 +104,8 @@ The repository-wide lint command has pre-existing errors outside this workflow.
 1. Open Orchard Map, scroll to Current detections, and point out the Simulation mode banner and five evidence states.
 2. Open SIM-104. Explain that camera verification is scripted and no image/GPS is available.
 3. Choose False alarm → Animal, add a note, and save simulated feedback.
-4. Open Harvest Logs → Reviewed history, refresh, and reopen the event. Explain that farmer
-   feedback persists locally while the original system prediction is preserved.
+4. Open Harvest Logs to see Date, Time (MYT), and Detection type. Filter by
+   detection type and export the same three columns to CSV or PDF.
 5. Open SIM-101 to demonstrate that a camera timeout stays failed/unknown.
 
 Automated Chromium checks passed at 320px, 390px, and 1440px widths, including
@@ -113,8 +113,9 @@ feedback persistence/revision, history and date/status filters, empty results,
 unknown events, corrupt storage, failed writes, and local feedback after going
 offline in an already loaded page. This does not establish offline reload support.
 
-Detection details stay within their parent page (`/map/events/:eventId` or
-`/analytics/events/:eventId`). Legacy `/detections` links redirect to Orchard Map.
-Harvest Logs CSV/PDF exports include only the currently filtered simulation records
-and keep system status separate from farmer feedback. The sample weekly chart
-remains labelled as illustrative and is not calculated from these records.
+Detection details and feedback stay in Orchard Map (`/map/events/:eventId`).
+Legacy detection and analytics detail links redirect there. Harvest Logs loads
+directly from simulation events without reading feedback storage, so corrupt or
+blocked local storage cannot prevent logs from displaying. Logs and exports contain
+only date, time, and detection type. Unfinished verification is labelled Awaiting
+verification; a failed camera result is Unknown, never Durian.

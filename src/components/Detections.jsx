@@ -16,8 +16,6 @@ import {
   saveFeedback,
 } from "../services/demoFeedback";
 import "./Detections.css";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 const statuses = {
   PENDING: "Candidate",
@@ -98,65 +96,6 @@ export default function Detections({ mode = "map" }) {
           timeZone: "Asia/Kuala_Lumpur",
         }) === day),
   );
-  function exportRows(format) {
-    const header = [
-      "Source",
-      "Event ID",
-      "Time (MYT)",
-      "Node",
-      "System status",
-      "Farmer feedback",
-      "Category",
-      "Note",
-    ];
-    const rows = filtered.map((item) => [
-      "SIMULATION",
-      item.id,
-      date(item.time),
-      item.node,
-      statuses[item.status],
-      records[item.id]
-        ? feedbackLabels[records[item.id].label]
-        : "Not reviewed",
-      records[item.id]?.category || "",
-      records[item.id]?.comment || "",
-    ]);
-    if (format === "pdf") {
-      const doc = new jsPDF({ orientation: "landscape" });
-      doc.setFontSize(16);
-      doc.text("Duri.AI — SIMULATED harvest logs", 14, 18);
-      doc.setFontSize(10);
-      doc.text(
-        "Scripted events and browser-local feedback only. No real harvest data.",
-        14,
-        26,
-      );
-      autoTable(doc, { startY: 33, head: [header], body: rows });
-      doc.save("DuriAI_Simulation_Logs.pdf");
-    } else {
-      // Prevent spreadsheet formulas in user-authored notes.
-      const cell = (value) =>
-        '"' +
-        String(/^[=+@\-\t\r]/.test(value) ? "'" + value : value).replaceAll(
-          '"',
-          '""',
-        ) +
-        '"';
-      const content = [header, ...rows]
-        .map((row) => row.map(cell).join(","))
-        .join("\r\n");
-      const url = URL.createObjectURL(
-        new Blob([content], { type: "text/csv;charset=utf-8" }),
-      );
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "DuriAI_Simulation_Logs.csv";
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
-  }
   return (
     <section className="detections">
       <div className="d-demo">
@@ -251,22 +190,6 @@ export default function Detections({ mode = "map" }) {
             <Link className="d-back" to="/analytics">
               View all events in Harvest Logs <ArrowUpRight size={18} />
             </Link>
-          )}
-          {mode === "history" && (
-            <div className="d-tabs">
-              <button
-                onClick={() => exportRows("csv")}
-                disabled={!filtered.length}
-              >
-                Export filtered CSV
-              </button>
-              <button
-                onClick={() => exportRows("pdf")}
-                disabled={!filtered.length}
-              >
-                Export filtered PDF
-              </button>
-            </div>
           )}
           <div className="d-filters">
             {mode === "history" && (
@@ -584,8 +507,8 @@ function EventDetails({ event, records, onSave, basePath }) {
           )}
           {saved && (
             <p className="d-success" role="status">
-              Simulated feedback saved in this browser. Find it in Harvest Logs
-              → Reviewed history. No model was retrained.
+              Simulated feedback saved in this browser. Your response remains
+              available on this event in Orchard Map. No model was retrained.
             </p>
           )}
           <p className="d-caption">
