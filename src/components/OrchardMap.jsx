@@ -25,22 +25,24 @@ const SAMPLE_NODES = [
 export default function OrchardMap() {
   const { eventId } = useParams();
   return (
-    <div className="space-y-6">
-      <header>
+    <div className={`ui-page orchard-grid${eventId ? " orchard-detail" : ""}`}>
+      <header className="orchard-header">
         <h1>Orchard Map</h1>
         <p className="mt-2 text-sm ui-muted">
           Review detections and farmer feedback alongside your orchard view.
         </p>
       </header>
       {!eventId && (
-        <section aria-label="Illustrative orchard map" className="space-y-3">
+        <section
+          aria-label="Illustrative orchard map"
+          className="map-panel ui-panel"
+        >
           <p className="ui-notice">
             <strong>Illustrative map only.</strong> Existing sample boundaries
-            and pins are not measured device locations. Detection events below
-            have no GPS and are not plotted. Map tiles require an internet
-            connection.
+            and pins are not measured device locations. Detection events have no
+            GPS and are not plotted. Map tiles require an internet connection.
           </p>
-          <div className="h-[38vh] min-h-64 overflow-hidden rounded-lg border border-[var(--ui-border)] relative z-0">
+          <div className="orchard-map-canvas">
             <MapContainer
               center={ORCHARD_CENTER}
               zoom={20}

@@ -82,7 +82,7 @@ export default function DashboardHome() {
       `${node.node_name}`.toLowerCase().includes(search.toLowerCase()),
     ) || [];
   return (
-    <div className="ui-page">
+    <div className="ui-page dashboard-grid">
       <header className="ui-page-header">
         <h1>Dashboard</h1>
         <Link className="ui-button" to="/map">
@@ -215,7 +215,7 @@ export default function DashboardHome() {
       )}
       {mode === "simulation" && (
         <>
-          <section className="ui-panel">
+          <section className="ui-panel dashboard-recent">
             <h2>Recent detections · simulation</h2>
             <div className="ui-table-wrap">
               <table className="ui-table">
@@ -258,7 +258,9 @@ export default function DashboardHome() {
               </table>
             </div>
           </section>
-          <HarvestChart />
+          <div className="dashboard-chart">
+            <HarvestChart />
+          </div>
         </>
       )}
       <Link className="ui-text-link" to="/analytics">

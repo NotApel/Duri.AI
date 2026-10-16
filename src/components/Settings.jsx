@@ -12,7 +12,7 @@ export default function Settings() {
         offline storage, or change a deployed model.
       </p>
       <form
-        className="ui-panel ui-form"
+        className="ui-panel ui-form settings-grid"
         onChange={() => setSaved(false)}
         onSubmit={(e) => {
           e.preventDefault();

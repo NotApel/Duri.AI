@@ -155,3 +155,8 @@ or a dev server that cannot start.
 
 The shared UI palette uses `#37583a` (primary green), `#6f864f` (secondary green),
 `#b6b265` (olive), and `#ffdc83` (gold), with light surface tints for legibility.
+
+Desktop pages use a shared CSS Grid layout: sidebar/content tracks, a 12-column
+dashboard with recent detections beside the chart, and a map/detection split on
+wide screens. Tablet and phone layouts reduce columns without hiding content.
+Harvest Logs keeps its four-column table and responsive export toolbar.

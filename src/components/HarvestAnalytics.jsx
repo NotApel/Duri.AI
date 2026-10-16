@@ -101,7 +101,7 @@ export default function HarvestAnalytics() {
           </span>
         </div>
       </div>
-      <div className="d-filters">
+      <div className="d-filters log-toolbar">
         <label>
           Detection type
           <select
