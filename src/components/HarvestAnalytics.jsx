@@ -36,8 +36,9 @@ export default function HarvestAnalytics() {
     eventDate(event.time),
     eventTime(event.time),
     detectionType(event),
+    event.node,
   ]);
-  const headers = ["Date", "Time (MYT)", "Detection type"];
+  const headers = ["Date", "Time (MYT)", "Detection type", "Node"];
   async function exportLogs(format) {
     setExporting(true);
     setError("");
@@ -88,7 +89,7 @@ export default function HarvestAnalytics() {
       <header>
         <h1 className="text-3xl font-bold text-emerald-950">Harvest Logs</h1>
         <p className="mt-2 text-sm text-slate-700">
-          Detection records by date, time, and type.
+          Detection records by date, time, detection type, and sensor node.
         </p>
       </header>
       <div className="d-demo">
@@ -138,7 +139,7 @@ export default function HarvestAnalytics() {
           </caption>
           <thead className="bg-emerald-900 text-white">
             <tr>
-              {["Date", "Time (MYT)", "Detection type"].map((title) => (
+              {["Date", "Time (MYT)", "Detection type", "Node"].map((title) => (
                 <th scope="col" className="p-3 sm:p-4" key={title}>
                   {title}
                 </th>
