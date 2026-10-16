@@ -1,5 +1,6 @@
 // src/components/AuthScreen.jsx
-import React, { useState } from "react";
+import { useState } from "react";
+import { TreeDeciduous } from "lucide-react";
 import { registerFarmer, loginFarmer } from "../services/api";
 
 export default function AuthScreen({ onLoginSuccess }) {
@@ -20,7 +21,7 @@ export default function AuthScreen({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const data = await registerFarmer({
+      await registerFarmer({
         full_name: fullName,
         email,
         password_hash: password,
@@ -49,7 +50,7 @@ export default function AuthScreen({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const data = await loginFarmer(email, password);
+      await loginFarmer(email, password);
       setSuccessMessage("Login successful!");
       // Call the onLoginSuccess prop to navigate to dashboard
       if (onLoginSuccess) {
@@ -63,143 +64,132 @@ export default function AuthScreen({ onLoginSuccess }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans">
-      {/* Decorative ambient backgrounds */}
-      <div className="absolute top-[-20%] left-[-20%] w-96 h-96 rounded-full bg-emerald-500/10 blur-3xl"></div>
-      <div className="absolute bottom-[-20%] right-[-20%] w-96 h-96 rounded-full bg-blue-500/10 blur-3xl"></div>
-
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl z-10">
-        <div className="text-center mb-8">
-          <span className="text-4xl block mb-2">🌳</span>
-          <h2 className="text-3xl font-black text-white tracking-tight">
-            DURI.AI
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Self-Learning Durian Harvest System
-          </p>
+    <main className="ui-auth">
+      <section className="ui-panel ui-auth-panel">
+        <div className="app-brand">
+          <TreeDeciduous size={24} aria-hidden="true" />
+          DURI.AI
         </div>
-
+        <h1>
+          {mode === "register"
+            ? "Create your account"
+            : mode === "recover"
+              ? "Password recovery"
+              : "Sign in"}
+        </h1>
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs mb-4 font-medium flex items-center gap-2">
-            ⚠️ {error}
-          </div>
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {error}
+          </p>
         )}
-
         {successMessage && (
-          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-xs mb-4 font-medium flex items-center gap-2">
-            ✅ {successMessage}
-          </div>
+          <p className="ui-notice mb-4" role="status">
+            {successMessage}
+          </p>
         )}
-
-        <form
-          onSubmit={mode === "register" ? handleRegister : handleLogin}
-          className="space-y-4"
-        >
-          {mode === "register" && (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Full Name
+        {mode === "recover" ? (
+          <p className="ui-notice">
+            Password recovery is not connected yet. Please contact your project
+            administrator.
+          </p>
+        ) : (
+          <form
+            className="ui-form"
+            onSubmit={mode === "register" ? handleRegister : handleLogin}
+          >
+            {mode === "register" && (
+              <>
+                <label className="ui-field" htmlFor="full-name">
+                  Full name
+                  <input
+                    id="full-name"
+                    autoComplete="name"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                  placeholder="e.g., Ahmad bin Abdullah"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Phone Number
+                <label className="ui-field" htmlFor="phone-number">
+                  Phone number
+                  <input
+                    id="phone-number"
+                    type="tel"
+                    autoComplete="tel"
+                    required
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                  />
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                  placeholder="e.g., 0123456789"
-                />
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              Email Address
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-              placeholder="ahmad@farm.com"
-            />
-          </div>
-
-          {mode !== "recover" && (
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Password
-              </label>
+              </>
+            )}
+            <label className="ui-field" htmlFor="email">
+              Email address
               <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
+            <label className="ui-field" htmlFor="password">
+              Password
+              <input
+                id="password"
                 type="password"
+                autoComplete={
+                  mode === "register" ? "new-password" : "current-password"
+                }
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                placeholder="••••••••"
               />
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold py-3 rounded-xl shadow-lg transition mt-6 ${
-              loading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          >
-            {loading
-              ? "Processing..."
-              : mode === "login"
-                ? "Access Control System"
+            </label>
+            <button className="ui-button primary" disabled={loading}>
+              {loading
+                ? "Please wait…"
                 : mode === "register"
-                  ? "Register Network Profile"
-                  : "Dispatch Recovery Ticket"}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-6 border-t border-slate-800/60 flex flex-wrap justify-between text-xs text-slate-400 gap-2">
+                  ? "Create account"
+                  : "Sign in"}
+            </button>
+          </form>
+        )}
+        <div className="ui-auth-links">
           {mode === "login" ? (
             <>
               <button
-                onClick={() => setMode("register")}
-                className="hover:text-emerald-400 transition font-medium"
+                onClick={() => {
+                  setMode("register");
+                  setError("");
+                  setSuccessMessage("");
+                }}
               >
-                Create Account
+                Create account
               </button>
               <button
-                onClick={() => setMode("recover")}
-                className="hover:text-emerald-400 transition font-medium"
+                onClick={() => {
+                  setMode("recover");
+                  setError("");
+                  setSuccessMessage("");
+                }}
               >
-                Forgot Password?
+                Forgot password?
               </button>
             </>
           ) : (
             <button
-              onClick={() => setMode("login")}
-              className="w-full text-center hover:text-emerald-400 transition font-medium"
+              onClick={() => {
+                setMode("login");
+                setError("");
+                setSuccessMessage("");
+              }}
             >
-              Return to Access Login
+              Back to sign in
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

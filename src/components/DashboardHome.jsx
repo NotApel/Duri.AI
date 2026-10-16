@@ -1,246 +1,158 @@
-// src/components/DashboardHome.jsx
-import React, { useState, useEffect } from "react";
-import HarvestChart from "./HarvestChart";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 export default function DashboardHome() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // State for real data from database
-  const [stats, setStats] = useState({
-    totalDrops: 0,
-    networkVitality: { online: 0, total: 0 },
-    trackedPerimeter: 0,
-  });
-  const [sectors, setSectors] = useState([]);
-
-  // Fetch data from database
+  const [search, setSearch] = useState("");
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    const fetchData = async () => {
+    const controller = new AbortController();
+    async function load() {
       try {
-        setLoading(true);
-        setError(null);
-
-        // 1. Fetch detections (for drops count)
-        const detectionsRes = await fetch(
-          "http://localhost:3000/api/detections",
-        );
-        const detections = await detectionsRes.json();
-
-        // 2. Fetch stats
-        const statsRes = await fetch(
-          "http://localhost:3000/api/analytics/stats",
-        );
-        const statsData = await statsRes.json();
-
-        // 3. Fetch sensor nodes
-        const nodesRes = await fetch("http://localhost:3000/api/plots/1/nodes");
-        const nodes = await nodesRes.json();
-
-        // Calculate metrics from real data
-        const totalDrops = detections.length || 0;
-        const onlineNodes = nodes.filter((n) => n.status === "ONLINE").length;
-        const totalNodes = nodes.length || 3;
-
-        // Build sectors from nodes data
-        const sectorData = nodes.map((node, index) => {
-          // Count detections per node (if detection table has node_id)
-          const nodeDetections = detections.filter(
-            (d) => d.node_id === node.node_id || d.node_name === node.node_name,
-          );
-          return {
-            name: node.node_name || `Node ${String.fromCharCode(65 + index)}`,
-            nodes:
-              node.node_name || `NODE-${String(index + 1).padStart(2, "0")}`,
-            health: node.status === "ONLINE" ? "Optimal" : "Low Battery Alert",
-            drops: nodeDetections.length || 0,
-            battery: node.battery_level || 0,
-            status: node.status || "OFFLINE",
-          };
-        });
-
-        // If no nodes in database, use default sectors with 0 values
-        const finalSectors =
-          sectorData.length > 0
-            ? sectorData
-            : [
-                {
-                  name: "Sector Alpha (GMI Plot)",
-                  nodes: "NODE-01, NODE-02",
-                  health: "Optimal",
-                  drops: 0,
-                  battery: 87,
-                  status: "ONLINE",
-                },
-                {
-                  name: "Sector Beta (Boundary)",
-                  nodes: "NODE-03",
-                  health: "Low Battery Alert",
-                  drops: 0,
-                  battery: 12,
-                  status: "OFFLINE",
-                },
-                {
-                  name: "Sector Gamma (Nursery)",
-                  nodes: "Unassigned",
-                  health: "Standby",
-                  drops: 0,
-                  battery: 0,
-                  status: "OFFLINE",
-                },
-              ];
-
-        setStats({
-          totalDrops: totalDrops,
-          networkVitality: { online: onlineNodes, total: totalNodes || 3 },
-          trackedPerimeter: Math.round((totalNodes || 3) * 0.67 * 100) / 100,
-        });
-        setSectors(finalSectors);
-        setLoading(false);
+        const read = async (path) => {
+          const response = await fetch(`http://localhost:3000/api/${path}`, {
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error("Request failed");
+          return response.json();
+        };
+        const [detections, stats, nodes] = await Promise.all([
+          read("detections"),
+          read("analytics/stats"),
+          read("plots/1/nodes"),
+        ]);
+        if (
+          !Array.isArray(detections) ||
+          !Array.isArray(nodes) ||
+          typeof stats.total !== "number"
+        )
+          throw new Error("Unexpected response");
+        setData({ detections, stats, nodes });
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-        setError("Failed to load data. Please check your backend.");
-        setLoading(false);
+        if (err.name !== "AbortError")
+          setError(
+            "Orchard data is unavailable. Check that the backend and database are running, then try again.",
+          );
       }
-    };
-
-    fetchData();
-  }, []);
-
-  // Dynamic search bar filtering
-  const filteredSectors = sectors.filter(
-    (sector) =>
-      sector.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sector.nodes.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-400 text-lg">Loading orchard data...</p>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-red-400 text-lg">⚠️ {error}</p>
-      </div>
-    );
-  }
-
+    }
+    load();
+    return () => controller.abort();
+  }, [attempt]);
+  const nodes =
+    data?.nodes.filter((node) =>
+      `${node.node_name}`.toLowerCase().includes(search.toLowerCase()),
+    ) || [];
   return (
-    <div className="space-y-8">
-      {/* SECTION 1: GLOBAL HEADER SEARCH BAR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl border bg-linear-to-r from-green-700 to-green-500 backdrop-blur-sm shadow-md">
-        <div>
-          <h1 className="text-2xl font-black text-neutral-50">
-            Welcome back, Admin!
-          </h1>
-          <p className="text-xs text-neutral-50 mt-0.5">
-            Monitor and manage your orchard's infrastructure and harvest data.
+    <div className="ui-page">
+      <header className="ui-page-header">
+        <h1>Dashboard</h1>
+        <Link className="ui-button" to="/map">
+          Open Orchard Map
+        </Link>
+      </header>
+      {error ? (
+        <section className="ui-panel">
+          <h2>Unable to load orchard data</h2>
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {error}
           </p>
-        </div>
-        <div className="relative w-full md:w-72">
-          <span className="absolute left-3.5 top-3 text-slate-500 text-sm">
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Search sectors or nodes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-neutral-50 text-slate-950 text-xs rounded-xl pl-10 pr-4 py-3 border border-slate-800 focus:outline-none focus:border-emerald-500 transition"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* SECTION 2: SUMMARY OF ALL SECTIONS */}
-        <div className="lg:col-span-2 space-y-5">
-          <h3 className="shadow-md text-2xl bg-linear-to-r from-green-700 to-green-500 rounded-lg p-1 font-bold text-neutral-50 uppercase tracking-widest text-center">
-            Orchard Infrastructure Summary
-          </h3>
-
-          {/* Quick Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="shadow-md bg-yellow-50 border border-slate-700/50 p-5 rounded-2xl">
-              <span className="text-xl">🍈</span>
-              <h4 className="text-xs text-slate-900 mt-2 font-medium">
-                Total Area Yield
-              </h4>
-              <p className="text-2xl font-black text-emerald-400 mt-0.5">
-                {stats.totalDrops} Drops
-              </p>
+          <button
+            className="ui-button"
+            onClick={() => {
+              setError("");
+              setData(null);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </section>
+      ) : !data ? (
+        <p className="ui-notice" role="status">
+          Loading orchard data…
+        </p>
+      ) : (
+        <>
+          <dl className="ui-summary">
+            <div>
+              <dt>Total events</dt>
+              <dd>{data.stats.total}</dd>
             </div>
-            <div className="shadow-md bg-yellow-50 border border-slate-700/50 p-5 rounded-2xl">
-              <span className="text-xl">🔋</span>
-              <h4 className="text-xs text-slate-900 mt-2 font-medium">
-                Network Vitality
-              </h4>
-              <p className="text-2xl font-black text-blue-400 mt-0.5">
-                {stats.networkVitality.online} / {stats.networkVitality.total}{" "}
-                Stable
-              </p>
+            <div>
+              <dt>Verified events</dt>
+              <dd>{data.stats.verified ?? "Unavailable"}</dd>
             </div>
-            <div className="shadow-md bg-yellow-50 border border-slate-700/50 p-5 rounded-2xl">
-              <span className="text-xl">📐</span>
-              <h4 className="text-xs text-slate-900 mt-2 font-medium">
-                Tracked Perimeter
-              </h4>
-              <p className="text-2xl font-black text-amber-400 mt-0.5">
-                {stats.trackedPerimeter} m² Matrix
-              </p>
+            <div>
+              <dt>Online nodes · Plot 1</dt>
+              <dd>
+                {data.nodes.filter((node) => node.status === "ONLINE").length} /{" "}
+                {data.nodes.length}
+              </dd>
             </div>
+          </dl>
+          <div className="ui-page-header">
+            <h2>Sensor nodes · Plot 1</h2>
+            <label className="ui-field" htmlFor="node-search">
+              Search nodes
+              <input
+                id="node-search"
+                type="search"
+                className="ui-input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Node name"
+              />
+            </label>
           </div>
-
-          {/* Render Filtered Search Results */}
-          <div className="bg-yellow-50 border border-slate-700/50 rounded-2xl p-5 space-y-3 shadow-lg">
-            <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Sector Overview Logs
-            </h4>
-            <div className="space-y-2">
-              {filteredSectors.length > 0 ? (
-                filteredSectors.map((sector, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-linear-to-r from-green-700 to-green-800 p-3 rounded-xl flex justify-between items-center text-xs border border-slate-900"
-                  >
-                    <div>
-                      <p className="font-bold text-slate-100">{sector.name}</p>
-                      <p className="text-slate-300 mt-0.5">
-                        Hardware: {sector.nodes}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${sector.health === "Optimal" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}
-                      >
-                        {sector.health}
-                      </span>
-                      <p className="text-slate-400 font-semibold mt-1">
-                        {sector.drops} verified
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-500 py-2 text-center">
-                  No structural farm entries match your search criteria.
-                </p>
-              )}
-            </div>
+          <div className="ui-table-wrap">
+            <table className="ui-table">
+              <thead>
+                <tr>
+                  <th scope="col">Node</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Battery</th>
+                  <th scope="col">Recent events</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((node) => (
+                  <tr key={node.node_id}>
+                    <td>{node.node_name}</td>
+                    <td>{node.status || "Unknown"}</td>
+                    <td>
+                      {node.battery_level == null
+                        ? "Unavailable"
+                        : `${node.battery_level}%`}
+                    </td>
+                    <td>
+                      {
+                        data.detections.filter(
+                          (event) => event.node_name === node.node_name,
+                        ).length
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!nodes.length && (
+              <p className="p-6 ui-muted">
+                {data.nodes.length
+                  ? "No nodes match your search."
+                  : "No sensor nodes are registered for this plot."}
+              </p>
+            )}
           </div>
-          {/* Harvest Analytics Chart */}
-          <div className="mt-6">
-            <HarvestChart />
-          </div>
-        </div>
-      </div>
+          <p className="ui-muted">
+            Recent events refer to the latest ten records returned by the API.
+            Orchard area and harvest weight are unavailable.
+          </p>
+        </>
+      )}
+      <Link className="ui-text-link" to="/analytics">
+        View Harvest Logs (simulated events)
+      </Link>
     </div>
   );
 }

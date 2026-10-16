@@ -27,20 +27,20 @@ export default function OrchardMap() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold text-emerald-950">Orchard Map</h1>
+        <h1>Orchard Map</h1>
         <p className="mt-2 text-sm text-slate-700">
           Review detections and farmer feedback alongside your orchard view.
         </p>
       </header>
       {!eventId && (
         <section aria-label="Illustrative orchard map" className="space-y-3">
-          <p className="rounded-lg border border-amber-800/20 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="ui-notice">
             <strong>Illustrative map only.</strong> Existing sample boundaries
             and pins are not measured device locations. Detection events below
             have no GPS and are not plotted. Map tiles require an internet
             connection.
           </p>
-          <div className="h-[38vh] min-h-64 overflow-hidden rounded-2xl border border-emerald-900/20 relative z-0">
+          <div className="h-[38vh] min-h-64 overflow-hidden rounded-lg border border-emerald-900/20 relative z-0">
             <MapContainer
               center={ORCHARD_CENTER}
               zoom={20}

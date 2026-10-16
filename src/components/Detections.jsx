@@ -1,13 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  Camera,
-  Leaf,
-  Radio,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Camera, RefreshCw } from "lucide-react";
 import { demoDetections } from "../data/demoDetections";
 import {
   categories,
@@ -99,7 +92,6 @@ export default function Detections({ mode = "map" }) {
   return (
     <section className="detections">
       <div className="d-demo">
-        <Leaf size={19} aria-hidden="true" />
         <div>
           <strong>Simulation mode</strong>
           <span>
@@ -116,7 +108,6 @@ export default function Detections({ mode = "map" }) {
       )}
       <header className="d-heading">
         <div>
-          <p className="d-eyebrow">DURI.AI / FIELD NOTES</p>
           <h2 className="d-page-title" ref={heading} tabIndex={-1}>
             {eventId
               ? "Detection details"
@@ -124,13 +115,7 @@ export default function Detections({ mode = "map" }) {
                 ? "Detection history"
                 : "Current detections"}
           </h2>
-          <p>Evidence first. Every fall has a story.</p>
         </div>
-        <span className="d-edition">
-          DEMO COLLECTION
-          <br />
-          17 OCT 2026 · MYT
-        </span>
       </header>
       {loading ? (
         <p className="d-empty" role="status">
@@ -168,7 +153,6 @@ export default function Detections({ mode = "map" }) {
               {demoDetections.filter((item) => !records[item.id]).length}
             </strong>
             <span>simulated events awaiting your review</span>
-            <Radio size={28} aria-hidden="true" />
           </div>
           {mode === "history" ? (
             <div className="d-tabs" role="group" aria-label="Review filter">
@@ -258,12 +242,9 @@ export default function Detections({ mode = "map" }) {
                 key={item.id}
                 to={`${basePath}/events/${item.id}`}
               >
-                <div className="d-event-icon">
-                  <Leaf aria-hidden="true" />
-                </div>
                 <div className="d-event-body">
                   <div className="d-event-top">
-                    <span className="d-eyebrow">SIMULATION / {item.id}</span>
+                    <span className="d-event-id">{item.id} · simulation</span>
                     <Badge status={item.status} />
                   </div>
                   <h2>
@@ -292,7 +273,6 @@ export default function Detections({ mode = "map" }) {
           </div>
           {!filtered.length && (
             <div className="d-empty">
-              <Leaf size={32} aria-hidden="true" />
               <h2>No events in this view</h2>
               <p>
                 Try another filter or choose All events to explore the
@@ -363,7 +343,7 @@ function EventDetails({ event, records, onSave, basePath }) {
       <div className="d-detail-grid">
         <article className="d-evidence">
           <div className="d-event-top">
-            <span className="d-eyebrow">SIMULATION / {event.id}</span>
+            <span className="d-event-id">{event.id} · simulation</span>
             <Badge status={event.status} />
           </div>
           <h2>What happened?</h2>
@@ -419,7 +399,6 @@ function EventDetails({ event, records, onSave, basePath }) {
           </p>
         </article>
         <aside className="d-feedback">
-          <p className="d-eyebrow">FARMER FIELD NOTE</p>
           <h2>Your feedback</h2>
           <p>
             Record what you observed. Your response is kept separate from the

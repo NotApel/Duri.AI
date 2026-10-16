@@ -85,9 +85,9 @@ export default function HarvestAnalytics() {
     }
   }
   return (
-    <section className="detections space-y-6">
+    <section className="detections ui-page">
       <header>
-        <h1 className="text-3xl font-bold text-emerald-950">Harvest Logs</h1>
+        <h1>Harvest Logs</h1>
         <p className="mt-2 text-sm text-slate-700">
           Detection records by date, time, detection type, and sensor node.
         </p>
@@ -132,15 +132,15 @@ export default function HarvestAnalytics() {
           {error}
         </p>
       )}
-      <div className="overflow-x-auto rounded-xl border border-emerald-900/20 bg-amber-50">
-        <table className="w-full text-left text-sm">
+      <div className="ui-table-wrap">
+        <table className="ui-table">
           <caption className="sr-only">
             Simulated harvest logs. Dates and times use Malaysia time.
           </caption>
-          <thead className="bg-emerald-900 text-white">
+          <thead>
             <tr>
               {["Date", "Time (MYT)", "Detection type", "Node"].map((title) => (
-                <th scope="col" className="p-3 sm:p-4" key={title}>
+                <th scope="col" key={title}>
                   {title}
                 </th>
               ))}
@@ -148,11 +148,9 @@ export default function HarvestAnalytics() {
           </thead>
           <tbody>
             {events.map((event, index) => (
-              <tr className="border-t border-emerald-900/15" key={event.id}>
+              <tr key={event.id}>
                 {rows[index].map((value, column) => (
-                  <td className="p-3 sm:p-4" key={column}>
-                    {value}
-                  </td>
+                  <td key={column}>{value}</td>
                 ))}
               </tr>
             ))}

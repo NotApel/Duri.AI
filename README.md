@@ -119,3 +119,22 @@ directly from simulation events without reading feedback storage, so corrupt or
 blocked local storage cannot prevent logs from displaying. Logs and exports contain
 only date, time, detection type, and node. Unfinished verification is labelled Awaiting
 verification; a failed camera result is Unknown, never Durian.
+
+
+## UI conventions
+
+The frontend follows `.agents/skills/uncodixfy/SKILL.md`: solid orchard-green
+navigation, light neutral backgrounds, Montserrat throughout, plain headings,
+consistent labelled fields, simple bordered tables, and visible keyboard focus.
+Shared colors, spacing, navigation, and form/table classes live in `src/index.css`;
+detection-specific styles remain in `src/components/Detections.css`. No new UI
+framework or dependency is required.
+
+The dashboard reads the existing backend APIs and displays loading, retry, and
+empty states without invented node readings, orchard area, or sample yield charts.
+Node updates and settings remain explicitly local demonstrations. Password recovery
+shows its unavailable state rather than submitting a login request.
+
+UI validation includes Chromium checks at 320px, 390px, and 1440px for all six
+screens; login and dashboard requests are mocked during browser checks. These
+checks validate frontend interactions, not production authentication or hardware.
