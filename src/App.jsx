@@ -7,6 +7,7 @@ import OrchardMap from "./components/OrchardMap";
 import HarvestAnalytics from "./components/HarvestAnalytics";
 import NodeManagement from "./components/NodeManagement";
 import Settings from "./components/Settings";
+import Detections from "./components/Detections";
 
 // Wrapper to pass onLoginSuccess to AuthScreen
 function AuthWrapper() {
@@ -31,6 +32,8 @@ function App() {
         {/* App routes with sidebar */}
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardHome />} />
+          <Route path="/detections" element={<Detections />} />
+          <Route path="/detections/:eventId" element={<Detections />} />
           <Route path="/map" element={<OrchardMap />} />
           <Route path="/analytics" element={<HarvestAnalytics />} />
           <Route path="/nodes" element={<NodeManagement />} />

@@ -1,4 +1,3 @@
-import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
@@ -28,6 +27,7 @@ export default function AppLayout() {
         </div>
 
         <nav className="flex-1 space-y-1">
+          <NavLink to="/detections" className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-lg font-semibold text-sm ${isActive ? "bg-emerald-800 text-white" : "text-white hover:bg-emerald-900/40"}`}><ClipboardList className="w-5 h-5" />Detections</NavLink>
           <NavLink
             to="/dashboard"
             className={({ isActive }) =>
@@ -113,11 +113,13 @@ export default function AppLayout() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto max-w-8xl mx-auto w-full">
+        <div className="mb-4 rounded-lg border border-amber-700/30 bg-amber-50 p-3 text-sm text-amber-950">Development preview: map, charts, node updates and settings include demo behavior. Hardware, notifications and retraining are not connected.</div>
         <Outlet />
       </main>
 
       {/* MOBILE BOTTOM NAV BACKGROUND (bg-emerald-950/95) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-emerald-950/95 backdrop-blur-md border-t border-emerald-900/40 flex justify-around items-center py-2 px-1 z-50 shadow-lg">
+        <NavLink to="/detections" className={({ isActive }) => `flex flex-col items-center justify-center min-h-12 px-2 text-[10px] ${isActive ? "text-emerald-300 font-bold" : "text-slate-200"}`}><ClipboardList className="w-5 h-5" /><span>Detections</span></NavLink>
         <NavLink
           to="/dashboard"
           className={({ isActive }) =>
