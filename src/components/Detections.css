@@ -59,7 +59,7 @@
   margin: 32px 0;
 }
 .d-heading h1 {
-  font-family: Georgia, serif;
+  font-family: var(--font-sans);
   font-size: clamp(32px, 5vw, 49px);
   line-height: 1.15;
   letter-spacing: -1.5px;
@@ -98,7 +98,7 @@
   );
 }
 .d-summary strong {
-  font-family: Georgia, serif;
+  font-family: var(--font-sans);
   font-size: 42px;
   line-height: 1;
 }
@@ -187,7 +187,7 @@
   flex-wrap: wrap;
 }
 .d-event h2 {
-  font-family: Georgia, serif;
+  font-family: var(--font-sans);
   font-size: 23px;
   margin: 8px 0;
 }
@@ -230,7 +230,7 @@
   margin: auto;
 }
 .d-empty h2 {
-  font-family: Georgia, serif;
+  font-family: var(--font-sans);
   font-size: 26px;
 }
 .d-back {
@@ -253,7 +253,7 @@
 }
 .d-evidence h2,
 .d-feedback h2 {
-  font-family: Georgia, serif;
+  font-family: var(--font-sans);
   font-size: 29px;
   margin: 15px 0;
 }
@@ -307,7 +307,7 @@
   display: block;
 }
 .d-measurements strong {
-  font-family: Georgia, serif;
+  font-family: var(--font-sans);
   font-size: 24px;
 }
 .d-measurements span {
