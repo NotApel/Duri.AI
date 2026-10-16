@@ -1,5 +1,12 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import AuthScreen from "./components/AuthScreen";
 import AppLayout from "./components/AppLayout";
 import DashboardHome from "./components/DashboardHome";
@@ -7,7 +14,11 @@ import OrchardMap from "./components/OrchardMap";
 import HarvestAnalytics from "./components/HarvestAnalytics";
 import NodeManagement from "./components/NodeManagement";
 import Settings from "./components/Settings";
-import Detections from "./components/Detections";
+
+function LegacyDetectionRedirect() {
+  const { eventId } = useParams();
+  return <Navigate to={`/map/events/${encodeURIComponent(eventId)}`} replace />;
+}
 
 // Wrapper to pass onLoginSuccess to AuthScreen
 function AuthWrapper() {
@@ -32,10 +43,18 @@ function App() {
         {/* App routes with sidebar */}
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardHome />} />
-          <Route path="/detections" element={<Detections />} />
-          <Route path="/detections/:eventId" element={<Detections />} />
+          <Route path="/detections" element={<Navigate to="/map" replace />} />
+          <Route
+            path="/detections/:eventId"
+            element={<LegacyDetectionRedirect />}
+          />
           <Route path="/map" element={<OrchardMap />} />
+          <Route path="/map/events/:eventId" element={<OrchardMap />} />
           <Route path="/analytics" element={<HarvestAnalytics />} />
+          <Route
+            path="/analytics/events/:eventId"
+            element={<HarvestAnalytics />}
+          />
           <Route path="/nodes" element={<NodeManagement />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

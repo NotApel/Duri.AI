@@ -58,7 +58,7 @@
   align-items: center;
   margin: 32px 0;
 }
-.d-heading h1 {
+.d-heading .d-page-title {
   font-family: var(--font-sans);
   font-size: clamp(32px, 5vw, 49px);
   line-height: 1.15;
@@ -131,6 +131,7 @@
 }
 .detections select,
 .detections input[type="date"],
+.detections input[type="search"],
 .detections textarea {
   display: block;
   width: 100%;

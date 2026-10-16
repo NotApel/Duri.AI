@@ -16,6 +16,8 @@ import {
   saveFeedback,
 } from "../services/demoFeedback";
 import "./Detections.css";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const statuses = {
   PENDING: "Candidate",
@@ -38,13 +40,15 @@ function Badge({ status }) {
   );
 }
 
-export default function Detections() {
+export default function Detections({ mode = "map" }) {
   const { eventId } = useParams();
   const [records, setRecords] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [online, setOnline] = useState(navigator.onLine);
-  const [view, setView] = useState("needs");
+  const [view, setView] = useState(mode === "history" ? "all" : "needs");
+  const [query, setQuery] = useState("");
+  const basePath = mode === "history" ? "/analytics" : "/map";
   const [status, setStatus] = useState("");
   const [node, setNode] = useState("");
   const [day, setDay] = useState("");
@@ -83,6 +87,10 @@ export default function Detections() {
     (item) =>
       (view === "all" ||
         (view === "reviewed" ? records[item.id] : !records[item.id])) &&
+      (!query ||
+        `${item.id} ${item.node} ${records[item.id]?.comment || ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase())) &&
       (!status || item.status === status) &&
       (!node || item.node === node) &&
       (!day ||
@@ -90,6 +98,65 @@ export default function Detections() {
           timeZone: "Asia/Kuala_Lumpur",
         }) === day),
   );
+  function exportRows(format) {
+    const header = [
+      "Source",
+      "Event ID",
+      "Time (MYT)",
+      "Node",
+      "System status",
+      "Farmer feedback",
+      "Category",
+      "Note",
+    ];
+    const rows = filtered.map((item) => [
+      "SIMULATION",
+      item.id,
+      date(item.time),
+      item.node,
+      statuses[item.status],
+      records[item.id]
+        ? feedbackLabels[records[item.id].label]
+        : "Not reviewed",
+      records[item.id]?.category || "",
+      records[item.id]?.comment || "",
+    ]);
+    if (format === "pdf") {
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(16);
+      doc.text("Duri.AI — SIMULATED harvest logs", 14, 18);
+      doc.setFontSize(10);
+      doc.text(
+        "Scripted events and browser-local feedback only. No real harvest data.",
+        14,
+        26,
+      );
+      autoTable(doc, { startY: 33, head: [header], body: rows });
+      doc.save("DuriAI_Simulation_Logs.pdf");
+    } else {
+      // Prevent spreadsheet formulas in user-authored notes.
+      const cell = (value) =>
+        '"' +
+        String(/^[=+@\-\t\r]/.test(value) ? "'" + value : value).replaceAll(
+          '"',
+          '""',
+        ) +
+        '"';
+      const content = [header, ...rows]
+        .map((row) => row.map(cell).join(","))
+        .join("\r\n");
+      const url = URL.createObjectURL(
+        new Blob([content], { type: "text/csv;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "DuriAI_Simulation_Logs.csv";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }
   return (
     <section className="detections">
       <div className="d-demo">
@@ -111,9 +178,13 @@ export default function Detections() {
       <header className="d-heading">
         <div>
           <p className="d-eyebrow">DURI.AI / FIELD NOTES</p>
-          <h1 ref={heading} tabIndex={-1}>
-            {eventId ? "Detection details" : "Orchard detections"}
-          </h1>
+          <h2 className="d-page-title" ref={heading} tabIndex={-1}>
+            {eventId
+              ? "Detection details"
+              : mode === "history"
+                ? "Detection history"
+                : "Current detections"}
+          </h2>
           <p>Evidence first. Every fall has a story.</p>
         </div>
         <span className="d-edition">
@@ -141,11 +212,14 @@ export default function Detections() {
             event={event}
             records={records}
             onSave={setRecords}
+            basePath={basePath}
           />
         ) : (
           <div className="d-empty">
             <h2>Event not found</h2>
-            <Link to="/detections">Return to detections</Link>
+            <Link to={basePath}>
+              Return to {mode === "history" ? "harvest logs" : "orchard map"}
+            </Link>
           </div>
         )
       ) : (
@@ -157,22 +231,55 @@ export default function Detections() {
             <span>simulated events awaiting your review</span>
             <Radio size={28} aria-hidden="true" />
           </div>
-          <div className="d-tabs" role="group" aria-label="Review filter">
-            {[
-              ["needs", "Needs review"],
-              ["all", "All events"],
-              ["reviewed", "Reviewed history"],
-            ].map(([value, label]) => (
+          {mode === "history" ? (
+            <div className="d-tabs" role="group" aria-label="Review filter">
+              {[
+                ["needs", "Needs review"],
+                ["all", "All events"],
+                ["reviewed", "Reviewed history"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  aria-pressed={view === value}
+                  onClick={() => setView(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Link className="d-back" to="/analytics">
+              View all events in Harvest Logs <ArrowUpRight size={18} />
+            </Link>
+          )}
+          {mode === "history" && (
+            <div className="d-tabs">
               <button
-                key={value}
-                aria-pressed={view === value}
-                onClick={() => setView(value)}
+                onClick={() => exportRows("csv")}
+                disabled={!filtered.length}
               >
-                {label}
+                Export filtered CSV
               </button>
-            ))}
-          </div>
+              <button
+                onClick={() => exportRows("pdf")}
+                disabled={!filtered.length}
+              >
+                Export filtered PDF
+              </button>
+            </div>
+          )}
           <div className="d-filters">
+            {mode === "history" && (
+              <label>
+                Search logs
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Event, node or field note"
+                />
+              </label>
+            )}
             <label>
               System status
               <select
@@ -211,6 +318,7 @@ export default function Detections() {
                 setStatus("");
                 setNode("");
                 setDay("");
+                setQuery("");
               }}
             >
               Clear filters
@@ -225,7 +333,7 @@ export default function Detections() {
               <Link
                 className="d-event"
                 key={item.id}
-                to={`/detections/${item.id}`}
+                to={`${basePath}/events/${item.id}`}
               >
                 <div className="d-event-icon">
                   <Leaf aria-hidden="true" />
@@ -269,14 +377,22 @@ export default function Detections() {
               </p>
               <button
                 onClick={() => {
-                  setView("all");
+                  setView(mode === "history" ? "all" : "needs");
                   setStatus("");
                   setNode("");
                   setDay("");
+                  setQuery("");
                 }}
               >
-                Show all events
+                Clear event filters
               </button>
+              {mode === "map" && (
+                <p>
+                  <Link to="/analytics">
+                    Open Harvest Logs for reviewed events
+                  </Link>
+                </p>
+              )}
             </div>
           )}
         </>
@@ -285,7 +401,7 @@ export default function Detections() {
   );
 }
 
-function EventDetails({ event, records, onSave }) {
+function EventDetails({ event, records, onSave, basePath }) {
   const previous = records[event.id];
   const [label, setLabel] = useState(previous?.label || "");
   const [category, setCategory] = useState(previous?.category || "");
@@ -317,8 +433,9 @@ function EventDetails({ event, records, onSave }) {
   }
   return (
     <>
-      <Link className="d-back" to="/detections">
-        <ArrowLeft size={18} /> Back to detections
+      <Link className="d-back" to={basePath}>
+        <ArrowLeft size={18} />{" "}
+        {basePath === "/map" ? "Back to orchard map" : "Back to harvest logs"}
       </Link>
       <div className="d-detail-grid">
         <article className="d-evidence">
@@ -467,14 +584,17 @@ function EventDetails({ event, records, onSave }) {
           )}
           {saved && (
             <p className="d-success" role="status">
-              Simulated feedback saved in this browser. Open Reviewed history to
-              find it. No model was retrained.
+              Simulated feedback saved in this browser. Find it in Harvest Logs
+              → Reviewed history. No model was retrained.
             </p>
           )}
           <p className="d-caption">
             This does not change the system detection status, contact a server,
             or trigger a harvest notification.
           </p>
+          <Link className="d-back" to="/analytics">
+            View Harvest Logs <ArrowUpRight size={18} />
+          </Link>
         </aside>
       </div>
     </>
