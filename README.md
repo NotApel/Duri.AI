@@ -72,3 +72,42 @@ Progressive Web App
 ## 📄 License
 
 This project is developed as a Final Year Project (FYP) at the German-Malaysian Institute (GMI).
+
+## Frontend presentation: simulated detections
+
+Run `npm ci` and `npm run dev` from the repository root. Open the application at
+`/detections` (or select **Detections** in the desktop/mobile navigation). This
+presentation workflow does not require the backend or a successful login; it is
+not an authenticated production feature.
+
+- Explore five fixed, explicitly labelled scenarios: candidate, verifying,
+  confirmed simulation, rejected, and failed camera verification.
+- Filter by review state, system status, node, or Malaysia event date.
+- Open an event to inspect scripted camera results and sample vibration evidence.
+  No camera images or GPS coordinates are fabricated.
+- Submit Confirm durian, False alarm (with category), or Unsure. Optional notes
+  are limited to 500 characters. Feedback is stored only in this browser under
+  `duriai.simulation.feedback.v1`; refresh and use Reviewed history to find it.
+  Revisions replace the demo response, not the original system evidence.
+- Offline indicators describe local fixtures only. Nothing syncs to a server;
+  no notification, inference, model training, or hardware update is performed.
+- Browser storage must be available. Read failures block feedback loading rather
+  than overwriting unreadable records; write failures retain form selections for retry.
+
+Checks: `npm run build`, `node --test tests/demoFeedback.test.js`, and
+`npx eslint src/components/Detections.jsx src/services/demoFeedback.js src/data/demoDetections.js src/components/AppLayout.jsx src/App.jsx`.
+The repository-wide lint command has pre-existing errors outside this workflow.
+
+### Presentation walkthrough
+
+1. Open Detections and point out the Simulation mode banner and five evidence states.
+2. Open SIM-104. Explain that camera verification is scripted and no image/GPS is available.
+3. Choose False alarm → Animal, add a note, and save simulated feedback.
+4. Return to Reviewed history, refresh, and reopen the event. Explain that farmer
+   feedback persists locally while the original system prediction is preserved.
+5. Open SIM-101 to demonstrate that a camera timeout stays failed/unknown.
+
+Automated Chromium checks passed at 320px, 390px, and 1440px widths, including
+feedback persistence/revision, history and date/status filters, empty results,
+unknown events, corrupt storage, failed writes, and local feedback after going
+offline in an already loaded page. This does not establish offline reload support.
