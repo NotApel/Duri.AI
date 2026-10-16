@@ -1,4 +1,5 @@
 // src/App.jsx
+import "./styles/app.css";
 import {
   BrowserRouter,
   Routes,

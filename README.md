@@ -126,8 +126,11 @@ verification; a failed camera result is Unknown, never Durian.
 The frontend follows `.agents/skills/uncodixfy/SKILL.md`: solid orchard-green
 navigation, light neutral backgrounds, Montserrat throughout, plain headings,
 consistent labelled fields, simple bordered tables, and visible keyboard focus.
-Shared colors, spacing, navigation, and form/table classes live in `src/index.css`;
-detection-specific styles remain in `src/components/Detections.css`. No new UI
+Shared colors, spacing, navigation, and form/table classes live in
+`src/styles/app.css`, imported directly by `App.jsx`;
+detection-specific styles remain in `src/components/Detections.css`.
+`src/index.css` loads Tailwind and Montserrat; app layout styles do not depend on
+Tailwind utility generation. No new UI
 framework or dependency is required.
 
 The dashboard opens in labelled simulation mode with populated nodes, recent
