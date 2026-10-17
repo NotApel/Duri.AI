@@ -7,6 +7,15 @@ const { Pool } = require("pg");
 const jwt = require('jsonwebtoken');
 const auth = require('./middleware/auth');
 
+// Middleware untuk ESP32 (Device API Key)
+const deviceAuth = (req, res, next) => {
+  const apiKey = req.headers["x-api-key"];
+  if (!apiKey || apiKey !== process.env.DEVICE_API_KEY) {
+    return res.status(401).json({ error: "Unauthorized: Invalid API Key" });
+  }
+  next();
+};
+
 dotenv.config();
 
 const app = express();
@@ -454,6 +463,37 @@ app.get("/api/analytics/stats", auth, async (req, res) => {
   } catch (error) {
     console.error("Stats error:", error);
     res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+// ============================================================
+// 11. SENSOR READING ENDPOINT (For ESP32 Hardware)
+// ============================================================
+app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
+  try {
+    const { node_id, amplitude, frequency, duration } = req.body;
+
+    // Validation
+    if (!node_id || amplitude === undefined || frequency === undefined) {
+      return res.status(400).json({ error: "Missing required fields: node_id, amplitude, frequency" });
+    }
+
+    // Insert into database
+    const result = await pool.query(
+      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING *`,
+      [node_id, amplitude, frequency, duration || null]
+    );
+
+    res.status(201).json({
+      message: "Sensor reading saved successfully",
+      reading: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("Sensor reading error:", error);
+    res.status(500).json({ error: "Failed to save sensor reading" });
   }
 });
 
