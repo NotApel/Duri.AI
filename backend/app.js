@@ -1,8 +1,20 @@
 // backend/app.js
 const express = require("express");
+const bcrypt = require("bcrypt");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { Pool } = require("pg");
+const jwt = require('jsonwebtoken');
+const auth = require('./middleware/auth');
+
+// Middleware untuk ESP32 (Device API Key)
+const deviceAuth = (req, res, next) => {
+  const apiKey = req.headers["x-api-key"];
+  if (!apiKey || apiKey !== process.env.DEVICE_API_KEY) {
+    return res.status(401).json({ error: "Unauthorized: Invalid API Key" });
+  }
+  next();
+};
 
 dotenv.config();
 
@@ -42,28 +54,48 @@ app.get("/api/health", async (req, res) => {
 // Register a new farmer
 app.post("/api/auth/register", async (req, res) => {
   try {
-    const { full_name, email, password_hash, phone_number } = req.body;
+    const { full_name, username, email, password, phone_number } = req.body;
 
-    if (!full_name || !email || !password_hash || !phone_number) {
-      return res.status(400).json({ error: "All fields are required" });
+    if (!full_name || !username || !email || !password || !phone_number) {
+      return res.status(400).json({
+        error: "All fields are required",
+      });
     }
+
+    const password_hash = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      `INSERT INTO farmer (full_name, email, password_hash, phone_number)
-       VALUES ($1, $2, $3, $4)
-       RETURNING farmer_id, full_name, email, phone_number, created_at`,
-      [full_name, email, password_hash, phone_number],
+      `INSERT INTO farmer
+        (full_name, username, email, password_hash, phone_number)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING farmer_id, full_name, username, email, phone_number, created_at, updated_at`,
+      [full_name, username, email, password_hash, phone_number]
     );
 
-    res.status(201).json({
-      message: "Farmer registered successfully",
-      farmer: result.rows[0],
-    });
+    const newFarmer = result.rows[0];
+const token = jwt.sign(
+  { id: newFarmer.farmer_id, username: newFarmer.username },
+  process.env.JWT_SECRET,
+  { expiresIn: '7d' }
+);
+
+res.status(201).json({
+  message: "Farmer registered successfully",
+  token: token,
+  farmer: newFarmer,
+});
   } catch (error) {
     console.error("Register error:", error);
-    if (error.constraint === "farmer_email_key") {
-      return res.status(400).json({ error: "Email already registered" });
+
+    if (error.code === "23505") {
+      if (error.constraint === "farmer_username_key") {
+        return res.status(400).json({ error: "Username already registered" });
+      }
+      if (error.constraint === "farmer_email_key") {
+        return res.status(400).json({ error: "Email already registered" });
+      }
     }
+
     res.status(500).json({ error: "Registration failed" });
   }
 });
@@ -71,27 +103,45 @@ app.post("/api/auth/register", async (req, res) => {
 // Login farmer
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password_hash } = req.body;
+    const { username, password } = req.body;
 
-    if (!email || !password_hash) {
-      return res.status(400).json({ error: "Email and password required" });
+    if (!username || !password) {
+      return res.status(400).json({
+        error: "Username and password are required",
+      });
     }
 
     const result = await pool.query(
-      `SELECT farmer_id, full_name, email, phone_number, created_at
+      `SELECT farmer_id, full_name, username, email, password_hash, phone_number, created_at, updated_at
        FROM farmer
-       WHERE email = $1 AND password_hash = $2`,
-      [email, password_hash],
+       WHERE username = $1`,
+      [username]
     );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    res.json({
-      message: "Login successful",
-      farmer: result.rows[0],
-    });
+    const farmer = result.rows[0];
+    const passwordMatch = await bcrypt.compare(password, farmer.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    delete farmer.password_hash;
+
+const token = jwt.sign(
+  { id: farmer.farmer_id, username: farmer.username },
+  process.env.JWT_SECRET,
+  { expiresIn: '7d' }
+);
+
+res.json({
+  message: "Login successful",
+  token: token,
+  farmer: farmer,
+});
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Login failed" });
@@ -99,14 +149,14 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // ============================================================
-// FARMER ENDPOINTS
+// 1. FARMER ENDPOINTS (Table: farmer)
 // ============================================================
 
-// Get all farmers
-app.get("/api/farmers", async (req, res) => {
+// Get all farmers (supports /api/farmer and /api/farmers)
+app.get(["/api/farmer", "/api/farmers"], auth ,async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT farmer_id, full_name, email, phone_number, created_at, updated_at FROM farmer ORDER BY created_at DESC",
+      "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer ORDER BY created_at DESC"
     );
     res.json(result.rows);
   } catch (error) {
@@ -116,12 +166,12 @@ app.get("/api/farmers", async (req, res) => {
 });
 
 // Get farmer by ID
-app.get("/api/farmers/:id", async (req, res) => {
+app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      "SELECT farmer_id, full_name, email, phone_number, created_at, updated_at FROM farmer WHERE farmer_id = $1",
-      [id],
+      "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer WHERE farmer_id = $1",
+      [id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Farmer not found" });
@@ -134,16 +184,16 @@ app.get("/api/farmers/:id", async (req, res) => {
 });
 
 // ============================================================
-// FARM PLOT ENDPOINTS
+// 2. FARM PLOT ENDPOINTS (Table: farm_plot)
 // ============================================================
 
-// Get all farm plots for a farmer
-app.get("/api/farmers/:farmerId/plots", async (req, res) => {
+// Get all plots for a farmer
+app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
     const result = await pool.query(
       "SELECT * FROM farm_plot WHERE farmer_id = $1 ORDER BY plot_name",
-      [farmerId],
+      [farmerId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -152,25 +202,23 @@ app.get("/api/farmers/:farmerId/plots", async (req, res) => {
   }
 });
 
-// Create a new farm plot
-app.post("/api/farmers/:farmerId/plots", async (req, res) => {
+// Create farm plot
+app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
     const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
 
-    if (!farm_name || !plot_name || !latitude || !longitude) {
-      return res
-        .status(400)
-        .json({
-          error: "Farm name, plot name, latitude, and longitude are required",
-        });
+    if (!farm_name || !plot_name || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({
+        error: "Farm name, plot name, latitude, and longitude are required",
+      });
     }
 
     const result = await pool.query(
       `INSERT INTO farm_plot (farmer_id, farm_name, plot_name, plot_size, latitude, longitude)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [farmerId, farm_name, plot_name, plot_size, latitude, longitude],
+      [farmerId, farm_name, plot_name, plot_size || null, latitude, longitude]
     );
 
     res.status(201).json(result.rows[0]);
@@ -181,16 +229,15 @@ app.post("/api/farmers/:farmerId/plots", async (req, res) => {
 });
 
 // ============================================================
-// SENSOR NODE ENDPOINTS
+// 3. SENSOR NODE ENDPOINTS (Table: sensor_node)
 // ============================================================
 
-// Get all sensor nodes for a farm plot
-app.get("/api/plots/:plotId/nodes", async (req, res) => {
+app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth, async (req, res) => {
   try {
     const { plotId } = req.params;
     const result = await pool.query(
       "SELECT * FROM sensor_node WHERE plot_id = $1 ORDER BY node_name",
-      [plotId],
+      [plotId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -200,19 +247,32 @@ app.get("/api/plots/:plotId/nodes", async (req, res) => {
 });
 
 // ============================================================
-// DETECTION (ALERT) ENDPOINTS
+// 4. DETECTION ENDPOINTS (Table: detection)
 // ============================================================
 
-// Get latest detections
-app.get("/api/detections", async (req, res) => {
+app.get(["/api/detection", "/api/detections"], auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT d.*, sn.node_name 
+      `SELECT 
+         d.*, 
+         sn.node_name,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'image_id', di.image_id,
+               'image_path', di.image_path,
+               'sequence_number', di.sequence_number,
+               'is_selected', di.is_selected
+             )
+           ) FILTER (WHERE di.image_id IS NOT NULL), '[]'
+         ) AS images
        FROM detection d
        JOIN sensor_reading sr ON d.reading_id = sr.reading_id
        JOIN sensor_node sn ON sr.node_id = sn.node_id
+       LEFT JOIN detection_image di ON d.detection_id = di.detection_id
+       GROUP BY d.detection_id, sn.node_name
        ORDER BY d.detection_at DESC
-       LIMIT 10`,
+       LIMIT 10`
     );
     res.json(result.rows);
   } catch (error) {
@@ -221,10 +281,9 @@ app.get("/api/detections", async (req, res) => {
   }
 });
 
-// Create a new detection
-app.post("/api/detections", async (req, res) => {
+app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
   try {
-    const {
+    let {
       reading_id,
       prediction,
       confidence,
@@ -236,17 +295,25 @@ app.post("/api/detections", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    prediction = prediction.toUpperCase();
+    if (!["DURIAN", "NOT_DURIAN"].includes(prediction)) {
+      return res.status(400).json({
+        error: "Invalid prediction value. Must be 'DURIAN' or 'NOT_DURIAN'",
+      });
+    }
+
+    detection_status = detection_status ? detection_status.toUpperCase() : "PENDING";
+    if (!["PENDING", "VERIFIED", "REJECTED"].includes(detection_status)) {
+      return res.status(400).json({
+        error: "Invalid detection_status. Must be 'PENDING', 'VERIFIED', or 'REJECTED'",
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [
-        reading_id,
-        prediction,
-        confidence,
-        verify_required || false,
-        detection_status || "PENDING",
-      ],
+      [reading_id, prediction, confidence, verify_required || false, detection_status]
     );
 
     res.status(201).json(result.rows[0]);
@@ -257,66 +324,141 @@ app.post("/api/detections", async (req, res) => {
 });
 
 // ============================================================
-// FEEDBACK ENDPOINTS
+// 5. DETECTION IMAGE ENDPOINTS (Table: detection_image)
 // ============================================================
 
-// Submit feedback for a detection
-app.post("/api/detections/:detectionId/feedback", async (req, res) => {
+app.get(["/api/detection/:detectionId/detection-image", "/api/detections/:detectionId/images"], auth, async (req, res) => {
   try {
     const { detectionId } = req.params;
-    const { farmer_id, category_id, correct_detection, comment_farmer } =
-      req.body;
-
-    if (!farmer_id || correct_detection === undefined) {
-      return res
-        .status(400)
-        .json({ error: "Farmer ID and correct_detection are required" });
-    }
-
     const result = await pool.query(
-      `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [detectionId, farmer_id, category_id, correct_detection, comment_farmer],
+      "SELECT * FROM detection_image WHERE detection_id = $1 ORDER BY sequence_number ASC",
+      [detectionId]
     );
-
-    // Update detection status
-    const newStatus = correct_detection ? "VERIFIED" : "REJECTED";
-    await pool.query(
-      "UPDATE detection SET detection_status = $1 WHERE detection_id = $2",
-      [newStatus, detectionId],
-    );
-
-    res.status(201).json(result.rows[0]);
+    res.json(result.rows);
   } catch (error) {
-    console.error("Feedback error:", error);
-    res.status(500).json({ error: "Failed to submit feedback" });
+    console.error("Get detection images error:", error);
+    res.status(500).json({ error: "Failed to fetch images" });
   }
 });
 
 // ============================================================
-// ANALYTICS ENDPOINTS
+// 6. FEEDBACK CATEGORY ENDPOINTS (Table: feedback_category)
 // ============================================================
 
-// Get detection statistics
-app.get("/api/analytics/stats", async (req, res) => {
+app.get(["/api/feedback-category", "/api/feedback-categories"], async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM feedback_category ORDER BY category_id ASC"
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get feedback categories error:", error);
+    res.status(500).json({ error: "Failed to fetch feedback categories" });
+  }
+});
+
+// ============================================================
+// 7. DETECTION FEEDBACK ENDPOINTS (Table: detection_feedback)
+// ============================================================
+
+app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:detectionId/feedback"], auth , async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { detectionId } = req.params;
+    const { farmer_id, category_id, correct_detection, comment_farmer } = req.body;
+
+    if (!farmer_id || correct_detection === undefined) {
+      return res.status(400).json({
+        error: "Farmer ID and correct_detection are required",
+      });
+    }
+
+    const feedbackResult = await client.query(
+      `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [detectionId, farmer_id, category_id || null, correct_detection, comment_farmer || null]
+    );
+
+    const newStatus = correct_detection ? "VERIFIED" : "REJECTED";
+    await client.query(
+      "UPDATE detection SET detection_status = $1 WHERE detection_id = $2",
+      [newStatus, detectionId]
+    );
+
+    // Otomatis tambah rekod ke dalam training_queue
+    await client.query(
+      `INSERT INTO training_queue (feedback_id, queue_status)
+       VALUES ($1, 'PENDING')`,
+      [feedbackResult.rows[0].feedback_id]
+    );
+
+    await client.query("COMMIT");
+    res.status(201).json(feedbackResult.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Feedback error:", error);
+    res.status(500).json({ error: "Failed to submit feedback" });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// 8. TRAINING QUEUE ENDPOINTS (Table: training_queue)
+// ============================================================
+
+app.get(["/api/training-queue", "/api/training_queue"], auth , async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM training_queue ORDER BY queue_at DESC LIMIT 20"
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get training queue error:", error);
+    res.status(500).json({ error: "Failed to fetch training queue" });
+  }
+});
+
+// ============================================================
+// 9. NOTIFICATION ENDPOINTS (Table: notification)
+// ============================================================
+
+app.get(["/api/notification", "/api/notifications"], auth , async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM notification ORDER BY created_at DESC LIMIT 50"
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get notification error:", error);
+    res.status(500).json({ error: "Failed to fetch notifications", details: error.message });
+  }
+});
+
+// ============================================================
+// 10. ANALYTICS STATS ENDPOINT
+// ============================================================
+
+app.get("/api/analytics/stats", auth, async (req, res) => {
   try {
     const total = await pool.query("SELECT COUNT(*) FROM detection");
     const verified = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'VERIFIED'",
+      "SELECT COUNT(*) FROM detection WHERE detection_status = 'VERIFIED'"
     );
     const rejected = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'REJECTED'",
+      "SELECT COUNT(*) FROM detection WHERE detection_status = 'REJECTED'"
     );
     const pending = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'PENDING'",
+      "SELECT COUNT(*) FROM detection WHERE detection_status = 'PENDING'"
     );
 
     res.json({
-      total: parseInt(total.rows[0].count),
-      verified: parseInt(verified.rows[0].count),
-      rejected: parseInt(rejected.rows[0].count),
-      pending: parseInt(pending.rows[0].count),
+      total: parseInt(total.rows[0].count, 10),
+      verified: parseInt(verified.rows[0].count, 10),
+      rejected: parseInt(rejected.rows[0].count, 10),
+      pending: parseInt(pending.rows[0].count, 10),
     });
   } catch (error) {
     console.error("Stats error:", error);
@@ -325,24 +467,33 @@ app.get("/api/analytics/stats", async (req, res) => {
 });
 
 // ============================================================
-// NOTIFICATION ENDPOINTS
+// 11. SENSOR READING ENDPOINT (For ESP32 Hardware)
 // ============================================================
-
-// Get notifications for a farmer
-app.get("/api/farmers/:farmerId/notifications", async (req, res) => {
+app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   try {
-    const { farmerId } = req.params;
+    const { node_id, amplitude, frequency, duration } = req.body;
+
+    // Validation
+    if (!node_id || amplitude === undefined || frequency === undefined) {
+      return res.status(400).json({ error: "Missing required fields: node_id, amplitude, frequency" });
+    }
+
+    // Insert into database
     const result = await pool.query(
-      `SELECT * FROM notification 
-       WHERE farmer_id = $1 
-       ORDER BY created_at DESC 
-       LIMIT 20`,
-      [farmerId],
+      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING *`,
+      [node_id, amplitude, frequency, duration || null]
     );
-    res.json(result.rows);
+
+    res.status(201).json({
+      message: "Sensor reading saved successfully",
+      reading: result.rows[0]
+    });
+
   } catch (error) {
-    console.error("Get notifications error:", error);
-    res.status(500).json({ error: "Failed to fetch notifications" });
+    console.error("Sensor reading error:", error);
+    res.status(500).json({ error: "Failed to save sensor reading" });
   }
 });
 
