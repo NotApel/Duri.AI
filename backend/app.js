@@ -3,12 +3,14 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { Pool } = require("pg");
+const fs = require("fs");
+const path = require("path");
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 // PostgreSQL connection pool
 const pool = new Pool({
@@ -159,11 +161,9 @@ app.post("/api/farmers/:farmerId/plots", async (req, res) => {
     const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
 
     if (!farm_name || !plot_name || !latitude || !longitude) {
-      return res
-        .status(400)
-        .json({
-          error: "Farm name, plot name, latitude, and longitude are required",
-        });
+      return res.status(400).json({
+        error: "Farm name, plot name, latitude, and longitude are required",
+      });
     }
 
     const result = await pool.query(
@@ -260,12 +260,18 @@ app.post("/api/detections", async (req, res) => {
 // FEEDBACK ENDPOINTS
 // ============================================================
 
-// Submit feedback for a detection
+// Submit feedback for a detection (UPDATED FOR SELF-LEARNING)
 app.post("/api/detections/:detectionId/feedback", async (req, res) => {
   try {
     const { detectionId } = req.params;
-    const { farmer_id, category_id, correct_detection, comment_farmer } =
-      req.body;
+    // Added image_base64 to the destructuring
+    const {
+      farmer_id,
+      category_id,
+      correct_detection,
+      comment_farmer,
+      image_base64,
+    } = req.body;
 
     if (!farmer_id || correct_detection === undefined) {
       return res
@@ -273,6 +279,7 @@ app.post("/api/detections/:detectionId/feedback", async (req, res) => {
         .json({ error: "Farmer ID and correct_detection are required" });
     }
 
+    // 1. Save feedback to PostgreSQL database
     const result = await pool.query(
       `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
        VALUES ($1, $2, $3, $4, $5)
@@ -280,12 +287,29 @@ app.post("/api/detections/:detectionId/feedback", async (req, res) => {
       [detectionId, farmer_id, category_id, correct_detection, comment_farmer],
     );
 
-    // Update detection status
+    // 2. Update detection status
     const newStatus = correct_detection ? "VERIFIED" : "REJECTED";
     await pool.query(
       "UPDATE detection SET detection_status = $1 WHERE detection_id = $2",
       [newStatus, detectionId],
     );
+
+    // 3. Save the image for AI Retraining (Self-Learning)
+    if (image_base64) {
+      const dir = path.join(__dirname, "feedback_images");
+
+      // Create folder if it doesn't exist
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+
+      // Remove base64 header (Supports both png and jpeg) and save as JPG
+      const base64Data = image_base64.replace(/^data:image\/\w+;base64,/, "");
+      const imagePath = path.join(dir, `feedback_${detectionId}.jpg`);
+      fs.writeFileSync(imagePath, base64Data, "base64");
+
+      console.log(`✅ Saved feedback image for training: ${imagePath}`);
+    }
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
