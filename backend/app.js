@@ -498,6 +498,171 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
 });
 
 // ============================================================
+// 12. IMAGE DETECTION ENDPOINT (For ESP32-CAM Hardware)
+// ============================================================
+app.post("/api/device/detections", deviceAuth, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { node_id, prediction, confidence, image_base64 } = req.body;
+
+    // Validation
+    if (!node_id || !prediction || confidence === undefined) {
+      return res.status(400).json({ error: "Missing required fields: node_id, prediction, confidence" });
+    }
+
+    // 1. Dapatkan reading_id terkini untuk node ini (untuk link detection dengan reading)
+    // Kita ambil reading paling baru yang dimasukkan oleh sensor getaran
+    const readingQuery = await client.query(
+      `SELECT reading_id FROM sensor_reading WHERE node_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+      [node_id]
+    );
+
+    if (readingQuery.rows.length === 0) {
+      return res.status(400).json({ error: "No sensor reading found for this node. Vibration data must be sent first." });
+    }
+    
+    const reading_id = readingQuery.rows[0].reading_id;
+
+    // 2. Simpan rekod Detection
+    const detectionResult = await client.query(
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING *`,
+      [reading_id, prediction.toUpperCase(), confidence, false, 'PENDING']
+    );
+    
+    const detection_id = detectionResult.rows[0].detection_id;
+
+    // 3. Simpan Gambar (Jika ada)
+    if (image_base64) {
+      // Simpan path sementara (dalam real production, kau akan simpan gambar ke AWS S3 atau local folder)
+      const imagePath = `/uploads/detection_${detection_id}.jpg`; 
+      
+      await client.query(
+        `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected)
+         VALUES ($1, $2, $3, $4)`,
+        [detection_id, imagePath, 1, true]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      message: "Detection and image processed successfully",
+      detection: detectionResult.rows[0]
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Detection error:", error);
+    res.status(500).json({ error: "Failed to process detection" });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// 13. SENSOR FUSION ENDPOINT (Gabungan Vibration + Image)
+// ============================================================
+app.post("/api/fusion-event", deviceAuth, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { node_id, amplitude, prediction, confidence, image_base64 } = req.body;
+
+    // Validation
+    if (!node_id || amplitude === undefined || !prediction) {
+      return res.status(400).json({ error: "Missing fields: node_id, amplitude, prediction" });
+    }
+
+    // 1. Simpan Reading (Vibration)
+    const readingResult = await client.query(
+      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
+       VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+      [node_id, amplitude, 50.0, 1.0] // Frequency & duration dummy untuk sementara
+    );
+    const reading_id = readingResult.rows[0].reading_id;
+
+    // 2. LOGIK SENSOR FUSION
+    const VIBRATION_THRESHOLD = 15.0; // Threshold untuk getaran kuat
+    let detection_status = "PENDING";
+    let verify_required = true;
+    
+    if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() === "DURIAN") {
+      detection_status = "VERIFIED"; // Dua-dua setuju!
+      verify_required = false;
+    } else if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() !== "DURIAN") {
+      detection_status = "REJECTED"; // Getaran kuat, tapi AI cakap bukan durian
+      verify_required = false;
+    }
+
+    // 3. Simpan Detection
+    const detectionResult = await client.query(
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at)
+       VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
+      [reading_id, prediction.toUpperCase(), confidence || 0, verify_required, detection_status]
+    );
+    const detection_id = detectionResult.rows[0].detection_id;
+
+    // 4. Simpan Gambar (Kalau ada)
+    if (image_base64) {
+      await client.query(
+        `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected)
+         VALUES ($1, $2, $3, $4)`,
+        [detection_id, `/uploads/detection_${detection_id}.jpg`, 1, true]
+      );
+    }
+
+    // 5. Cipta Notification HANYA JIKA VERIFIED
+    let notificationCreated = false;
+    if (detection_status === "VERIFIED") {
+      // Ambil farmer_id dari plot -> node
+      const farmerQuery = await client.query(
+        `SELECT fp.farmer_id FROM farm_plot fp 
+         JOIN sensor_node sn ON sn.plot_id = fp.plot_id 
+         WHERE sn.node_id = $1`, 
+        [node_id]
+      );
+      
+      if (farmerQuery.rows.length > 0) {
+        const farmer_id = farmerQuery.rows[0].farmer_id;
+        await client.query(
+          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [detection_id, farmer_id, 'Durian Detected!', `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
+        );
+        notificationCreated = true;
+      }
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      message: "Sensor Fusion processed successfully",
+      fusion_result: {
+        detection_id: detection_id,
+        vibration_amplitude: amplitude,
+        ai_prediction: prediction,
+        final_status: detection_status,
+        notification_triggered: notificationCreated
+      }
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Fusion error:", error);
+    res.status(500).json({ error: "Failed to process sensor fusion" });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
 // START SERVER
 // ============================================================
 const PORT = process.env.PORT || 3000;
