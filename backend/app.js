@@ -6,6 +6,21 @@ const dotenv = require("dotenv");
 const { Pool } = require("pg");
 const jwt = require('jsonwebtoken');
 const auth = require('./middleware/auth');
+const rateLimit = require('express-rate-limit');
+
+dotenv.config();
+
+const app = express();     // <--- PASTIKAN BARIS INI ADA
+
+app.use(cors());
+app.use(express.json());
+
+// Rate limiter
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many login attempts, please try again after 15 minutes" }
+});
 
 // Middleware untuk ESP32 (Device API Key)
 const deviceAuth = (req, res, next) => {
@@ -16,15 +31,9 @@ const deviceAuth = (req, res, next) => {
   next();
 };
 
-dotenv.config();
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
 // PostgreSQL connection pool
 const pool = new Pool({
-  user: process.env.DB_USER || "postgres",
+  user: process.env.DB_USER || "postsres",
   host: process.env.DB_HOST || "localhost",
   database: process.env.DB_NAME || "duri_ai_db",
   password: process.env.DB_PASSWORD || "postgres",
@@ -101,7 +110,7 @@ res.status(201).json({
 });
 
 // Login farmer
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", loginLimiter , async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -660,6 +669,97 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// ============================================================
+// 14. PASSWORD RESET ENDPOINTS
+// ============================================================
+
+// Simpan OTP dalam memori (untuk demo FYP)
+const resetCodes = {};
+
+// 1. Minta Reset Password (Hantar OTP)
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    // Check email wujud tak
+    const result = await pool.query("SELECT farmer_id FROM farmer WHERE email = $1", [email]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Email not found" });
+    }
+
+    // Jana 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    resetCodes[email] = otp;
+
+    // SIMULASI: Print dalam terminal (bukan hantar email betul)
+    console.log(`\n📧 [SIMULASI EMAIL] OTP untuk ${email} ialah: ${otp}\n`);
+
+    res.json({ 
+      message: "If the email exists, an OTP has been sent to your email.",
+      // Untuk FYP demo, kita bagi OTP dalam response (biar cikgu nampak)
+      demo_otp: otp 
+    });
+
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ error: "Failed to process request" });
+  }
+});
+
+// 2. Reset Password Guna OTP
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const { email, otp, new_password } = req.body;
+
+    if (!email || !otp || !new_password) {
+      return res.status(400).json({ error: "Email, OTP, and new password are required" });
+    }
+
+    // Check OTP betul ke tak
+    if (!resetCodes[email] || resetCodes[email] !== otp) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
+
+    // Hash password baru
+    const password_hash = await bcrypt.hash(new_password, 10);
+
+    // Update database
+    const result = await pool.query(
+      "UPDATE farmer SET password_hash = $1, updated_at = NOW() WHERE email = $2 RETURNING farmer_id",
+      [password_hash, email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Farmer not found" });
+    }
+
+    // Padam OTP dari memori
+    delete resetCodes[email];
+
+    res.json({ message: "Password reset successful. You can now login with new password." });
+
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
+
+// ============================================================
+// 404 NOT FOUND & ERROR HANDLER
+// ============================================================
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+app.use((err, req, res, next) => {
+  console.error("Unhandled Error:", err.stack);
+  res.status(500).json({ error: "Something went wrong on the server" });
 });
 
 // ============================================================
