@@ -7,7 +7,9 @@ import {
   Settings,
   LogOut,
   TreeDeciduous,
+  Brain, // === NEW ADDITION: Imported Brain icon ===
 } from "lucide-react";
+
 const navigation = [
   {
     path: "/dashboard",
@@ -22,9 +24,12 @@ const navigation = [
     mobile: "Logs",
     icon: ClipboardList,
   },
+  // === NEW ADDITION: Added AI Training route ===
+  { path: "/training", label: "AI Training", mobile: "AI", icon: Brain },
   { path: "/nodes", label: "Node Status", mobile: "Nodes", icon: Hexagon },
   { path: "/settings", label: "Settings", mobile: "Settings", icon: Settings },
 ];
+
 export default function AppLayout() {
   const navigate = useNavigate();
   const links = (mobile = false) =>
@@ -38,6 +43,7 @@ export default function AppLayout() {
         <span>{mobile ? shortLabel : label}</span>
       </NavLink>
     ));
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">

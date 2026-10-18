@@ -55,18 +55,24 @@ export default function DashboardHome() {
           if (!response.ok) throw new Error("Request failed");
           return response.json();
         };
-        const [detections, stats, nodes] = await Promise.all([
+
+        // === NEW ADDITION: Added trainingStats to the fetch ===
+        const [detections, stats, nodes, trainingStats] = await Promise.all([
           read("detections"),
           read("analytics/stats"),
           read("plots/1/nodes"),
+          read("analytics/training"),
         ]);
+
         if (
           !Array.isArray(detections) ||
           !Array.isArray(nodes) ||
           typeof stats.total !== "number"
         )
           throw new Error("Unexpected response");
-        setData({ detections, stats, nodes });
+
+        // === NEW ADDITION: Added trainingStats to the state ===
+        setData({ detections, stats, nodes, trainingStats });
       } catch (err) {
         if (err.name !== "AbortError")
           setError(
@@ -152,6 +158,23 @@ export default function DashboardHome() {
                 {data.nodes.length}
               </dd>
             </div>
+
+            {/* === NEW ADDITION: 3 New Cards for AI Stats === */}
+            <div>
+              <dt>Farmer Points</dt>
+              <dd>{data.trainingStats?.farmerPoints || 0}</dd>
+            </div>
+            <div>
+              <dt>AI Corrections</dt>
+              <dd>{data.trainingStats?.totalCorrections || 0}</dd>
+            </div>
+            <div>
+              <dt>AI Accuracy</dt>
+              <dd style={{ color: "var(--canopy)", fontWeight: "bold" }}>
+                {data.trainingStats?.currentAccuracy || 0}%
+              </dd>
+            </div>
+            {/* === END NEW ADDITION === */}
           </dl>
           <div className="ui-page-header">
             <h2>Sensor nodes · Plot 1</h2>

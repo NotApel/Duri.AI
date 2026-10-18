@@ -16,6 +16,7 @@ import OrchardMap from "./components/OrchardMap";
 import HarvestAnalytics from "./components/HarvestAnalytics";
 import NodeManagement from "./components/NodeManagement";
 import Settings from "./components/Settings";
+import TrainingHistory from "./components/TrainingHistory"; // === NEW ADDITION ===
 
 function LegacyDetectionRedirect() {
   const { eventId } = useParams();
@@ -57,6 +58,10 @@ function App() {
             path="/analytics/events/:eventId"
             element={<LegacyDetectionRedirect />}
           />
+
+          {/* === NEW ADDITION === */}
+          <Route path="/training" element={<TrainingHistory />} />
+
           <Route path="/nodes" element={<NodeManagement />} />
           <Route path="/settings" element={<Settings />} />
           <Route
