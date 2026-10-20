@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { demoDetections } from "../data/demoDetections";
+import { apiRequest } from "../services/api";
 import HarvestChart from "./HarvestChart";
 
 const demoNodes = [
@@ -48,13 +49,8 @@ export default function DashboardHome() {
     const controller = new AbortController();
     async function load() {
       try {
-        const read = async (path) => {
-          const response = await fetch(`http://localhost:3000/api/${path}`, {
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error("Request failed");
-          return response.json();
-        };
+        const read = (path) =>
+          apiRequest(`/${path}`, { signal: controller.signal });
         const [detections, stats, nodes] = await Promise.all([
           read("detections"),
           read("analytics/stats"),

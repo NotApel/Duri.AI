@@ -78,8 +78,8 @@ This project is developed as a Final Year Project (FYP) at the German-Malaysian 
 Run `npm ci` and `npm run dev` from the repository root. Open the application at
 `/map` (select **Orchard Map**) for current detections, or `/analytics`
 (select **Harvest Logs**, labelled **Logs** on mobile) for a simple four-column log. This
-presentation workflow does not require the backend or a successful login; it is
-not an authenticated production feature.
+simulation records do not require connected hardware, but the application now
+requires a backend login session before protected screens can be opened.
 
 - Explore five fixed, explicitly labelled scenarios: candidate, verifying,
   confirmed simulation, rejected, and failed camera verification.
@@ -160,3 +160,12 @@ Desktop pages use a shared CSS Grid layout: sidebar/content tracks, a 12-column
 dashboard with recent detections beside the chart, and a map/detection split on
 wide screens. Tablet and phone layouts reduce columns without hiding content.
 Harvest Logs keeps its four-column table and responsive export toolbar.
+
+
+## Authentication
+
+Registration, username login, session restoration, and confirmed logout now follow
+the supplied use cases. See [backend/AUTH.md](backend/AUTH.md) for setup, validation,
+API contracts, migration, and tests. Start the PostgreSQL-backed API before logging
+in; protected pages (including simulation pages) now require an account/session.
+The existing palette, styles, and grid layout are unchanged.
