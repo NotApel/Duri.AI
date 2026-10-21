@@ -1,205 +1,225 @@
-// src/components/AuthScreen.jsx
-import React, { useState } from "react";
-import { registerFarmer, loginFarmer } from "../services/api";
+import { useContext, useRef, useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { TreeDeciduous } from "lucide-react";
+import { registerFarmer } from "../services/api";
+import { AuthContext } from "../services/AuthContext";
 
-export default function AuthScreen({ onLoginSuccess }) {
-  const [mode, setMode] = useState("login"); // 'login' | 'register' | 'recover'
+export default function AuthScreen() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { login } = useContext(AuthContext);
+  const mode = location.pathname === "/register" ? "register" : "login";
+  const [username, setUsername] = useState(location.state?.username || "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const successMessage = location.state?.message || "";
   const [loading, setLoading] = useState(false);
-
-  // Handle registration
-  const handleRegister = async (e) => {
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  async function handleRegister(e) {
     e.preventDefault();
+    if (pending.current) return;
+    pending.current = true;
     setError("");
-    setSuccessMessage("");
     setLoading(true);
-
     try {
-      const data = await registerFarmer({
-        full_name: fullName,
-        email,
-        password_hash: password,
-        phone_number: phoneNumber,
+      const result = await registerFarmer({
+        full_name: fullName.trim(),
+        username: username.trim(),
+        email: email.trim(),
+        password,
+        phone_number: phoneNumber.trim(),
       });
-
-      setSuccessMessage("Account created successfully! Please login.");
-      setTimeout(() => {
-        setMode("login");
-        setFullName("");
-        setPhoneNumber("");
-        setPassword("");
-        setEmail("");
-      }, 2000);
+      if (mounted.current)
+        navigate("/login", {
+          replace: true,
+          state: { message: result.message, username: username.trim() },
+        });
     } catch (err) {
-      setError(err.message || "Registration failed. Please try again.");
+      if (mounted.current) setError(err.message);
     } finally {
-      setLoading(false);
+      pending.current = false;
+      if (mounted.current) setLoading(false);
     }
-  };
-
-  // Handle login
-  const handleLogin = async (e) => {
+  }
+  async function handleLogin(e) {
     e.preventDefault();
+    if (pending.current) return;
+    pending.current = true;
     setError("");
     setLoading(true);
-
     try {
-      const data = await loginFarmer(email, password);
-      setSuccessMessage("Login successful!");
-      // Call the onLoginSuccess prop to navigate to dashboard
-      if (onLoginSuccess) {
-        onLoginSuccess();
-      }
+      await login(username.trim(), password);
+      if (mounted.current) navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(err.message || "Invalid credentials. Please try again.");
+      if (mounted.current) setError(err.message);
     } finally {
-      setLoading(false);
+      pending.current = false;
+      if (mounted.current) setLoading(false);
     }
-  };
-
+  }
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans">
-      {/* Decorative ambient backgrounds */}
-      <div className="absolute top-[-20%] left-[-20%] w-96 h-96 rounded-full bg-emerald-500/10 blur-3xl"></div>
-      <div className="absolute bottom-[-20%] right-[-20%] w-96 h-96 rounded-full bg-blue-500/10 blur-3xl"></div>
-
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl z-10">
-        <div className="text-center mb-8">
-          <span className="text-4xl block mb-2">🌳</span>
-          <h2 className="text-3xl font-black text-white tracking-tight">
-            DURI.AI
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Self-Learning Durian Harvest System
-          </p>
+    <main className="ui-auth">
+      <section className="ui-panel ui-auth-panel">
+        <div className="app-brand">
+          <TreeDeciduous size={24} aria-hidden="true" />
+          DURI.AI
         </div>
-
+        <h1>{mode === "register" ? "Create your account" : "Login"}</h1>
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs mb-4 font-medium flex items-center gap-2">
-            ⚠️ {error}
-          </div>
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {error}
+          </p>
         )}
-
         {successMessage && (
-          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-xs mb-4 font-medium flex items-center gap-2">
-            ✅ {successMessage}
-          </div>
+          <p className="ui-notice mb-4" role="status">
+            {successMessage}
+          </p>
         )}
-
         <form
+          className="ui-form"
           onSubmit={mode === "register" ? handleRegister : handleLogin}
-          className="space-y-4"
         >
           {mode === "register" && (
             <>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Full Name
-                </label>
+              <label className="ui-field" htmlFor="full-name">
+                Full name
                 <input
-                  type="text"
+                  id="full-name"
+                  maxLength={200}
+                  autoComplete="name"
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                  placeholder="e.g., Ahmad bin Abdullah"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Phone Number
-                </label>
+              </label>
+              <label className="ui-field" htmlFor="register-username">
+                Username
                 <input
-                  type="text"
+                  id="register-username"
+                  autoComplete="username"
+                  required
+                  minLength={3}
+                  maxLength={50}
+                  pattern="[A-Za-z0-9._\-]{3,50}"
+                  title="3–50 letters, numbers, dots, underscores, or hyphens"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+              </label>
+              <label className="ui-field" htmlFor="phone-number">
+                Phone number
+                <input
+                  id="phone-number"
+                  maxLength={20}
+                  minLength={7}
+                  title="Phone number with at least 7 digits"
+                  type="tel"
+                  autoComplete="tel"
                   required
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                  placeholder="e.g., 0123456789"
                 />
-              </div>
+              </label>
             </>
           )}
-
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              Email Address
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-              placeholder="ahmad@farm.com"
-            />
-          </div>
-
-          {mode !== "recover" && (
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Password
-              </label>
+          {mode === "register" ? (
+            <label className="ui-field" htmlFor="email">
+              Email address
               <input
-                type="password"
+                id="email"
+                maxLength={200}
+                type="email"
+                autoComplete="email"
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                placeholder="••••••••"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
-            </div>
+            </label>
+          ) : (
+            <label className="ui-field" htmlFor="username">
+              Username
+              <input
+                id="username"
+                autoComplete="username"
+                required
+                maxLength={50}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </label>
           )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold py-3 rounded-xl shadow-lg transition mt-6 ${
-              loading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          >
+          <label className="ui-field" htmlFor="password">
+            Password
+            <input
+              id="password"
+              minLength={mode === "register" ? 8 : undefined}
+              maxLength={128}
+              title={mode === "register" ? "Use 8–128 characters" : undefined}
+              type="password"
+              autoComplete={
+                mode === "register" ? "new-password" : "current-password"
+              }
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <button className="ui-button primary" disabled={loading}>
             {loading
-              ? "Processing..."
-              : mode === "login"
-                ? "Access Control System"
-                : mode === "register"
-                  ? "Register Network Profile"
-                  : "Dispatch Recovery Ticket"}
+              ? "Please wait…"
+              : mode === "register"
+                ? "Register"
+                : "Login"}
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t border-slate-800/60 flex flex-wrap justify-between text-xs text-slate-400 gap-2">
+        <div className="ui-auth-links">
           {mode === "login" ? (
             <>
               <button
-                onClick={() => setMode("register")}
-                className="hover:text-emerald-400 transition font-medium"
+                disabled={loading}
+                onClick={() => {
+                  navigate("/register");
+                }}
               >
-                Create Account
+                Register
               </button>
               <button
-                onClick={() => setMode("recover")}
-                className="hover:text-emerald-400 transition font-medium"
+                disabled={loading}
+                onClick={() => {
+                  navigate("/", { replace: true });
+                }}
               >
-                Forgot Password?
+                Forgot password?
+              </button>
+              <button
+                disabled={loading}
+                onClick={() => navigate("/", { replace: true })}
+              >
+                Cancel
               </button>
             </>
           ) : (
             <button
-              onClick={() => setMode("login")}
-              className="w-full text-center hover:text-emerald-400 transition font-medium"
+              disabled={loading}
+              onClick={() => {
+                navigate("/login", { replace: true });
+              }}
             >
-              Return to Access Login
+              Cancel
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
