@@ -7,10 +7,13 @@ const { Pool } = require("pg");
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
+const jwt = require("jsonwebtoken");
+const auth = require("./middleware/auth");
+const rateLimit = require("express-rate-limit");
 
 dotenv.config();
 
-const app = express();     // <--- PASTIKAN BARIS INI ADA
+const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
@@ -19,7 +22,9 @@ app.use(express.json({ limit: "50mb" }));
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  message: { error: "Too many login attempts, please try again after 15 minutes" }
+  message: {
+    error: "Too many login attempts, please try again after 15 minutes",
+  },
 });
 
 // Middleware untuk ESP32 (Device API Key)
@@ -71,28 +76,27 @@ app.post("/api/auth/register", async (req, res) => {
       });
     }
 
-    const username =
-      email.split("@")[0] + "_" + Math.random().toString(36).substring(2, 6);
+    const password_hash = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
       `INSERT INTO farmer (full_name, username, email, password_hash, phone_number)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING farmer_id, full_name, email, phone_number, created_at`,
+       RETURNING farmer_id, full_name, username, email, phone_number, created_at, updated_at`,
       [full_name, username, email, password_hash, phone_number],
     );
 
     const newFarmer = result.rows[0];
-const token = jwt.sign(
-  { id: newFarmer.farmer_id, username: newFarmer.username },
-  process.env.JWT_SECRET,
-  { expiresIn: '7d' }
-);
+    const token = jwt.sign(
+      { id: newFarmer.farmer_id, username: newFarmer.username },
+      process.env.JWT_SECRET || "secret",
+      { expiresIn: "7d" },
+    );
 
-res.status(201).json({
-  message: "Farmer registered successfully",
-  token: token,
-  farmer: newFarmer,
-});
+    res.status(201).json({
+      message: "Farmer registered successfully",
+      token: token,
+      farmer: newFarmer,
+    });
   } catch (error) {
     console.error("Register error:", error);
 
@@ -110,7 +114,7 @@ res.status(201).json({
 });
 
 // Login farmer
-app.post("/api/auth/login", loginLimiter , async (req, res) => {
+app.post("/api/auth/login", loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -124,7 +128,7 @@ app.post("/api/auth/login", loginLimiter , async (req, res) => {
       `SELECT farmer_id, full_name, username, email, password_hash, phone_number, created_at, updated_at
        FROM farmer
        WHERE username = $1`,
-      [username]
+      [username],
     );
 
     if (result.rows.length === 0) {
@@ -140,20 +144,37 @@ app.post("/api/auth/login", loginLimiter , async (req, res) => {
 
     delete farmer.password_hash;
 
-const token = jwt.sign(
-  { id: farmer.farmer_id, username: farmer.username },
-  process.env.JWT_SECRET,
-  { expiresIn: '7d' }
-);
+    const token = jwt.sign(
+      { id: farmer.farmer_id, username: farmer.username },
+      process.env.JWT_SECRET || "secret",
+      { expiresIn: "7d" },
+    );
 
-res.json({
-  message: "Login successful",
-  token: token,
-  farmer: farmer,
-});
+    res.json({
+      message: "Login successful",
+      token: token,
+      farmer: farmer,
+    });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// Check current session (ADDED BACK TO FIX THE 404 ERROR)
+app.get("/api/auth/session", auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT farmer_id, full_name, username, email, phone_number FROM farmer WHERE farmer_id = $1",
+      [req.farmer.id],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Farmer not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Session error:", error);
+    res.status(500).json({ error: "Failed to get session" });
   }
 });
 
@@ -164,7 +185,7 @@ res.json({
 app.get("/api/farmers", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer ORDER BY created_at DESC"
+      "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer ORDER BY created_at DESC",
     );
     res.json(result.rows);
   } catch (error) {
@@ -178,7 +199,7 @@ app.get("/api/farmers/:id", async (req, res) => {
     const { id } = req.params;
     const result = await pool.query(
       "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer WHERE farmer_id = $1",
-      [id]
+      [id],
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Farmer not found" });
@@ -199,7 +220,7 @@ app.get("/api/farmers/:farmerId/plots", async (req, res) => {
     const { farmerId } = req.params;
     const result = await pool.query(
       "SELECT * FROM farm_plot WHERE farmer_id = $1 ORDER BY plot_name",
-      [farmerId]
+      [farmerId],
     );
     res.json(result.rows);
   } catch (error) {
@@ -223,7 +244,7 @@ app.post("/api/farmers/:farmerId/plots", async (req, res) => {
       `INSERT INTO farm_plot (farmer_id, farm_name, plot_name, plot_size, latitude, longitude)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [farmerId, farm_name, plot_name, plot_size || null, latitude, longitude]
+      [farmerId, farm_name, plot_name, plot_size || null, latitude, longitude],
     );
 
     res.status(201).json(result.rows[0]);
@@ -242,7 +263,7 @@ app.get("/api/plots/:plotId/nodes", async (req, res) => {
     const { plotId } = req.params;
     const result = await pool.query(
       "SELECT * FROM sensor_node WHERE plot_id = $1 ORDER BY node_name",
-      [plotId]
+      [plotId],
     );
     res.json(result.rows);
   } catch (error) {
@@ -277,7 +298,7 @@ app.get("/api/detections", async (req, res) => {
        LEFT JOIN detection_image di ON d.detection_id = di.detection_id
        GROUP BY d.detection_id, sn.node_name
        ORDER BY d.detection_at DESC
-       LIMIT 10`
+       LIMIT 10`,
     );
     res.json(result.rows);
   } catch (error) {
@@ -307,10 +328,13 @@ app.post("/api/detections", async (req, res) => {
       });
     }
 
-    detection_status = detection_status ? detection_status.toUpperCase() : "PENDING";
+    detection_status = detection_status
+      ? detection_status.toUpperCase()
+      : "PENDING";
     if (!["PENDING", "VERIFIED", "REJECTED"].includes(detection_status)) {
       return res.status(400).json({
-        error: "Invalid detection_status. Must be 'PENDING', 'VERIFIED', or 'REJECTED'",
+        error:
+          "Invalid detection_status. Must be 'PENDING', 'VERIFIED', or 'REJECTED'",
       });
     }
 
@@ -318,7 +342,13 @@ app.post("/api/detections", async (req, res) => {
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [reading_id, prediction, confidence, verify_required || false, detection_status]
+      [
+        reading_id,
+        prediction,
+        confidence,
+        verify_required || false,
+        detection_status,
+      ],
     );
 
     res.status(201).json(result.rows[0]);
@@ -332,113 +362,161 @@ app.post("/api/detections", async (req, res) => {
 // 5. DETECTION IMAGE ENDPOINTS (Table: detection_image)
 // ============================================================
 
-app.get(["/api/detection/:detectionId/detection-image", "/api/detections/:detectionId/images"], auth, async (req, res) => {
-  try {
-    const { detectionId } = req.params;
-    const result = await pool.query(
-      "SELECT * FROM detection_image WHERE detection_id = $1 ORDER BY sequence_number ASC",
-      [detectionId]
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Get detection images error:", error);
-    res.status(500).json({ error: "Failed to fetch images" });
-  }
-});
+app.get(
+  [
+    "/api/detection/:detectionId/detection-image",
+    "/api/detections/:detectionId/images",
+  ],
+  auth,
+  async (req, res) => {
+    try {
+      const { detectionId } = req.params;
+      const result = await pool.query(
+        "SELECT * FROM detection_image WHERE detection_id = $1 ORDER BY sequence_number ASC",
+        [detectionId],
+      );
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Get detection images error:", error);
+      res.status(500).json({ error: "Failed to fetch images" });
+    }
+  },
+);
 
 // ============================================================
 // 6. FEEDBACK CATEGORY ENDPOINTS (Table: feedback_category)
 // ============================================================
 
-app.get(["/api/feedback-category", "/api/feedback-categories"], async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM feedback_category ORDER BY category_id ASC"
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Get feedback categories error:", error);
-    res.status(500).json({ error: "Failed to fetch feedback categories" });
-  }
-});
+app.get(
+  ["/api/feedback-category", "/api/feedback-categories"],
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM feedback_category ORDER BY category_id ASC",
+      );
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Get feedback categories error:", error);
+      res.status(500).json({ error: "Failed to fetch feedback categories" });
+    }
+  },
+);
 
 // ============================================================
 // 7. DETECTION FEEDBACK ENDPOINTS (Table: detection_feedback)
 // ============================================================
 
-app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:detectionId/feedback"], auth , async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { detectionId } = req.params;
-    const { farmer_id, category_id, correct_detection, comment_farmer } = req.body;
+app.post(
+  [
+    "/api/detection/:detectionId/detection-feedback",
+    "/api/detections/:detectionId/feedback",
+  ],
+  auth,
+  async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { detectionId } = req.params;
+      const {
+        farmer_id,
+        category_id,
+        correct_detection,
+        comment_farmer,
+        image_base64,
+      } = req.body;
 
-    if (!farmer_id || correct_detection === undefined) {
-      return res.status(400).json({
-        error: "Farmer ID and correct_detection are required",
-      });
-    }
+      if (!farmer_id || correct_detection === undefined) {
+        return res.status(400).json({
+          error: "Farmer ID and correct_detection are required",
+        });
+      }
 
-    const feedbackResult = await client.query(
-      `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
+      const feedbackResult = await client.query(
+        `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [detectionId, farmer_id, category_id || null, correct_detection, comment_farmer || null]
-    );
+        [
+          detectionId,
+          farmer_id,
+          category_id || null,
+          correct_detection,
+          comment_farmer || null,
+        ],
+      );
 
-    const newStatus = correct_detection ? "VERIFIED" : "REJECTED";
-    await client.query(
-      "UPDATE detection SET detection_status = $1 WHERE detection_id = $2",
-      [newStatus, detectionId]
-    );
+      const newStatus = correct_detection ? "VERIFIED" : "REJECTED";
+      await client.query(
+        "UPDATE detection SET detection_status = $1 WHERE detection_id = $2",
+        [newStatus, detectionId],
+      );
 
-    // Otomatis tambah rekod ke dalam training_queue
-    await client.query(
-      `INSERT INTO training_queue (feedback_id, queue_status)
+      // Otomatis tambah rekod ke dalam training_queue
+      await client.query(
+        `INSERT INTO training_queue (feedback_id, queue_status)
        VALUES ($1, 'PENDING')`,
-      [feedbackResult.rows[0].feedback_id]
-    );
+        [feedbackResult.rows[0].feedback_id],
+      );
 
-    await client.query("COMMIT");
-    res.status(201).json(feedbackResult.rows[0]);
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error("Feedback error:", error);
-    res.status(500).json({ error: "Failed to submit feedback" });
-  } finally {
-    client.release();
-  }
-});
+      // YOUR IMAGE SAVING LOGIC
+      if (image_base64) {
+        const dir = path.join(__dirname, "feedback_images");
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+        const base64Data = image_base64.replace(/^data:image\/\w+;base64,/, "");
+        fs.writeFileSync(
+          path.join(dir, `feedback_${detectionId}.jpg`),
+          base64Data,
+          "base64",
+        );
+        console.log(`Saved feedback image for training.`);
+      }
+
+      await client.query("COMMIT");
+      res.status(201).json(feedbackResult.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Feedback error:", error);
+      res.status(500).json({ error: "Failed to submit feedback" });
+    } finally {
+      client.release();
+    }
+  },
+);
 
 // ============================================================
 // 8. TRAINING QUEUE ENDPOINTS (Table: training_queue)
 // ============================================================
 
-app.get(["/api/training-queue", "/api/training_queue"], auth , async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM training_queue ORDER BY queue_at DESC LIMIT 20"
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Get training queue error:", error);
-    res.status(500).json({ error: "Failed to fetch training queue" });
-  }
-});
+app.get(
+  ["/api/training-queue", "/api/training_queue"],
+  auth,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM training_queue ORDER BY queue_at DESC LIMIT 20",
+      );
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Get training queue error:", error);
+      res.status(500).json({ error: "Failed to fetch training queue" });
+    }
+  },
+);
 
 // ============================================================
 // 9. NOTIFICATION ENDPOINTS (Table: notification)
 // ============================================================
 
-app.get(["/api/notification", "/api/notifications"], auth , async (req, res) => {
+app.get(["/api/notification", "/api/notifications"], auth, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM notification ORDER BY created_at DESC LIMIT 50"
+      "SELECT * FROM notification ORDER BY created_at DESC LIMIT 50",
     );
     res.json(result.rows);
   } catch (error) {
     console.error("Get notification error:", error);
-    res.status(500).json({ error: "Failed to fetch notifications", details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch notifications", details: error.message });
   }
 });
 
@@ -450,13 +528,13 @@ app.get("/api/analytics/stats", auth, async (req, res) => {
   try {
     const total = await pool.query("SELECT COUNT(*) FROM detection");
     const verified = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'VERIFIED'"
+      "SELECT COUNT(*) FROM detection WHERE detection_status = 'VERIFIED'",
     );
     const rejected = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'REJECTED'"
+      "SELECT COUNT(*) FROM detection WHERE detection_status = 'REJECTED'",
     );
     const pending = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'PENDING'"
+      "SELECT COUNT(*) FROM detection WHERE detection_status = 'PENDING'",
     );
 
     res.json({
@@ -471,7 +549,7 @@ app.get("/api/analytics/stats", auth, async (req, res) => {
   }
 });
 
-app.get("/api/analytics/training", async (req, res) => {
+app.get("/api/analytics/training", auth, async (req, res) => {
   try {
     const corrections = await pool.query(
       "SELECT COUNT(*) FROM detection_feedback",
@@ -505,7 +583,7 @@ app.get("/api/analytics/training", async (req, res) => {
 // ============================================================
 // TRIGGER AI RETRAINING
 // ============================================================
-app.post("/api/analytics/retrain", (req, res) => {
+app.post("/api/analytics/retrain", auth, (req, res) => {
   const pythonPath =
     "C:\\Users\\Acer\\DuriAI_TFLite\\tflite_env\\Scripts\\python.exe";
   const scriptPath = "C:\\Users\\Acer\\DuriAI_TFLite\\retrain_model.py";
@@ -542,24 +620,25 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   try {
     const { node_id, amplitude, frequency, duration } = req.body;
 
-    // Validation
     if (!node_id || amplitude === undefined || frequency === undefined) {
-      return res.status(400).json({ error: "Missing required fields: node_id, amplitude, frequency" });
+      return res
+        .status(400)
+        .json({
+          error: "Missing required fields: node_id, amplitude, frequency",
+        });
     }
 
-    // Insert into database
     const result = await pool.query(
       `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
        VALUES ($1, $2, $3, $4, NOW())
        RETURNING *`,
-      [node_id, amplitude, frequency, duration || null]
+      [node_id, amplitude, frequency, duration || null],
     );
 
     res.status(201).json({
       message: "Sensor reading saved successfully",
-      reading: result.rows[0]
+      reading: result.rows[0],
     });
-
   } catch (error) {
     console.error("Sensor reading error:", error);
     res.status(500).json({ error: "Failed to save sensor reading" });
@@ -571,61 +650,63 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
 // ============================================================
 app.post("/api/device/detections", deviceAuth, async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
-    await client.query('BEGIN');
-    
+    await client.query("BEGIN");
+
     const { node_id, prediction, confidence, image_base64 } = req.body;
 
-    // Validation
     if (!node_id || !prediction || confidence === undefined) {
-      return res.status(400).json({ error: "Missing required fields: node_id, prediction, confidence" });
+      return res
+        .status(400)
+        .json({
+          error: "Missing required fields: node_id, prediction, confidence",
+        });
     }
 
-    // 1. Dapatkan reading_id terkini untuk node ini (untuk link detection dengan reading)
-    // Kita ambil reading paling baru yang dimasukkan oleh sensor getaran
     const readingQuery = await client.query(
       `SELECT reading_id FROM sensor_reading WHERE node_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
-      [node_id]
+      [node_id],
     );
 
     if (readingQuery.rows.length === 0) {
-      return res.status(400).json({ error: "No sensor reading found for this node. Vibration data must be sent first." });
+      return res
+        .status(400)
+        .json({
+          error:
+            "No sensor reading found for this node. Vibration data must be sent first.",
+        });
     }
-    
+
     const reading_id = readingQuery.rows[0].reading_id;
 
-    // 2. Simpan rekod Detection
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
        RETURNING *`,
-      [reading_id, prediction.toUpperCase(), confidence, false, 'PENDING']
+      [reading_id, prediction.toUpperCase(), confidence, false, "PENDING"],
     );
-    
+
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 3. Simpan Gambar (Jika ada)
     if (image_base64) {
-      // Simpan path sementara (dalam real production, kau akan simpan gambar ke AWS S3 atau local folder)
-      const imagePath = `/uploads/detection_${detection_id}.jpg`; 
-      
+      const imagePath = `/uploads/detection_${detection_id}.jpg`;
+
       await client.query(
         `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected)
          VALUES ($1, $2, $3, $4)`,
-        [detection_id, imagePath, 1, true]
+        [detection_id, imagePath, 1, true],
       );
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     res.status(201).json({
       message: "Detection and image processed successfully",
-      detection: detectionResult.rows[0]
+      detection: detectionResult.rows[0],
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     console.error("Detection error:", error);
     res.status(500).json({ error: "Failed to process detection" });
   } finally {
@@ -638,78 +719,92 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
 // ============================================================
 app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    
-    const { node_id, amplitude, prediction, confidence, image_base64 } = req.body;
 
-    // Validation
+  try {
+    await client.query("BEGIN");
+
+    const { node_id, amplitude, prediction, confidence, image_base64 } =
+      req.body;
+
     if (!node_id || amplitude === undefined || !prediction) {
-      return res.status(400).json({ error: "Missing fields: node_id, amplitude, prediction" });
+      return res
+        .status(400)
+        .json({ error: "Missing fields: node_id, amplitude, prediction" });
     }
 
-    // 1. Simpan Reading (Vibration)
     const readingResult = await client.query(
       `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
        VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
-      [node_id, amplitude, 50.0, 1.0] // Frequency & duration dummy untuk sementara
+      [node_id, amplitude, 50.0, 1.0],
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    // 2. LOGIK SENSOR FUSION
-    const VIBRATION_THRESHOLD = 15.0; // Threshold untuk getaran kuat
+    const VIBRATION_THRESHOLD = 15.0;
     let detection_status = "PENDING";
     let verify_required = true;
-    
-    if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() === "DURIAN") {
-      detection_status = "VERIFIED"; // Dua-dua setuju!
+
+    if (
+      amplitude > VIBRATION_THRESHOLD &&
+      prediction.toUpperCase() === "DURIAN"
+    ) {
+      detection_status = "VERIFIED";
       verify_required = false;
-    } else if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() !== "DURIAN") {
-      detection_status = "REJECTED"; // Getaran kuat, tapi AI cakap bukan durian
+    } else if (
+      amplitude > VIBRATION_THRESHOLD &&
+      prediction.toUpperCase() !== "DURIAN"
+    ) {
+      detection_status = "REJECTED";
       verify_required = false;
     }
 
-    // 3. Simpan Detection
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at)
        VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
-      [reading_id, prediction.toUpperCase(), confidence || 0, verify_required, detection_status]
+      [
+        reading_id,
+        prediction.toUpperCase(),
+        confidence || 0,
+        verify_required,
+        detection_status,
+      ],
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 4. Simpan Gambar (Kalau ada)
     if (image_base64) {
       await client.query(
         `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected)
          VALUES ($1, $2, $3, $4)`,
-        [detection_id, `/uploads/detection_${detection_id}.jpg`, 1, true]
+        [detection_id, `/uploads/detection_${detection_id}.jpg`, 1, true],
       );
     }
 
-    // 5. Cipta Notification HANYA JIKA VERIFIED
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
-      // Ambil farmer_id dari plot -> node
       const farmerQuery = await client.query(
         `SELECT fp.farmer_id FROM farm_plot fp 
          JOIN sensor_node sn ON sn.plot_id = fp.plot_id 
-         WHERE sn.node_id = $1`, 
-        [node_id]
+         WHERE sn.node_id = $1`,
+        [node_id],
       );
-      
+
       if (farmerQuery.rows.length > 0) {
         const farmer_id = farmerQuery.rows[0].farmer_id;
         await client.query(
           `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
            VALUES ($1, $2, $3, $4, $5)`,
-          [detection_id, farmer_id, 'Durian Detected!', `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
+          [
+            detection_id,
+            farmer_id,
+            "Durian Detected!",
+            `Durian jatuh dikesan dengan ${confidence}% keyakinan.`,
+            false,
+          ],
         );
         notificationCreated = true;
       }
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
     res.status(201).json({
       message: "Sensor Fusion processed successfully",
@@ -718,12 +813,11 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
         vibration_amplitude: amplitude,
         ai_prediction: prediction,
         final_status: detection_status,
-        notification_triggered: notificationCreated
-      }
+        notification_triggered: notificationCreated,
+      },
     });
-
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     console.error("Fusion error:", error);
     res.status(500).json({ error: "Failed to process sensor fusion" });
   } finally {
@@ -735,75 +829,70 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
 // 14. PASSWORD RESET ENDPOINTS
 // ============================================================
 
-// Simpan OTP dalam memori (untuk demo FYP)
 const resetCodes = {};
 
-// 1. Minta Reset Password (Hantar OTP)
 app.post("/api/auth/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    // Check email wujud tak
-    const result = await pool.query("SELECT farmer_id FROM farmer WHERE email = $1", [email]);
+    const result = await pool.query(
+      "SELECT farmer_id FROM farmer WHERE email = $1",
+      [email],
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Email not found" });
     }
 
-    // Jana 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     resetCodes[email] = otp;
 
-    // SIMULASI: Print dalam terminal (bukan hantar email betul)
-    console.log(`\n📧 [SIMULASI EMAIL] OTP untuk ${email} ialah: ${otp}\n`);
+    console.log(`\n[SIMULASI EMAIL] OTP untuk ${email} ialah: ${otp}\n`);
 
-    res.json({ 
+    res.json({
       message: "If the email exists, an OTP has been sent to your email.",
-      // Untuk FYP demo, kita bagi OTP dalam response (biar cikgu nampak)
-      demo_otp: otp 
+      demo_otp: otp,
     });
-
   } catch (error) {
     console.error("Forgot password error:", error);
     res.status(500).json({ error: "Failed to process request" });
   }
 });
 
-// 2. Reset Password Guna OTP
 app.post("/api/auth/reset-password", async (req, res) => {
   try {
     const { email, otp, new_password } = req.body;
 
     if (!email || !otp || !new_password) {
-      return res.status(400).json({ error: "Email, OTP, and new password are required" });
+      return res
+        .status(400)
+        .json({ error: "Email, OTP, and new password are required" });
     }
 
-    // Check OTP betul ke tak
     if (!resetCodes[email] || resetCodes[email] !== otp) {
       return res.status(400).json({ error: "Invalid or expired OTP" });
     }
 
-    // Hash password baru
     const password_hash = await bcrypt.hash(new_password, 10);
 
-    // Update database
     const result = await pool.query(
       "UPDATE farmer SET password_hash = $1, updated_at = NOW() WHERE email = $2 RETURNING farmer_id",
-      [password_hash, email]
+      [password_hash, email],
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Farmer not found" });
     }
 
-    // Padam OTP dari memori
     delete resetCodes[email];
 
-    res.json({ message: "Password reset successful. You can now login with new password." });
-
+    res.json({
+      message:
+        "Password reset successful. You can now login with new password.",
+    });
   } catch (error) {
     console.error("Reset password error:", error);
     res.status(500).json({ error: "Failed to reset password" });

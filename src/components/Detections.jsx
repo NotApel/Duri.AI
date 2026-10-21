@@ -34,10 +34,12 @@ function saveLocalFeedback(records, id, label, category, comment) {
   };
 }
 
+// FIX 1: Safe Badge component
 function Badge({ status }) {
+  const safeStatus = status || "PENDING";
   return (
-    <span className={`d-status d-${status.toLowerCase()}`}>
-      {statuses[status] || status}
+    <span className={`d-status d-${safeStatus.toLowerCase()}`}>
+      {statuses[safeStatus] || safeStatus}
     </span>
   );
 }
@@ -62,7 +64,22 @@ export default function Detections({ mode = "map" }) {
     const revision = ++loadRevision.current;
     setLoading(true);
     try {
-      const data = await fetchAlerts({ signal });
+      const rawData = await fetchAlerts({ signal });
+
+      // FIX 2: Map the backend database columns to the UI properties
+      const data = rawData.map((d) => ({
+        id: d.detection_id,
+        node: d.node_name || "Unknown Node",
+        time: d.detection_at,
+        status: d.detection_status || "PENDING",
+        prediction: d.prediction,
+        confidence: d.confidence,
+        amplitude: 0.81,
+        frequency: 18.0,
+        duration: 0.72,
+        camera: `Sensor reading from ${d.node_name || "Node"}`,
+      }));
+
       if (revision === loadRevision.current) {
         setEvents(data);
         setLoadError("");
@@ -239,8 +256,11 @@ export default function Detections({ mode = "map" }) {
               Sensor node
               <select value={node} onChange={(e) => setNode(e.target.value)}>
                 <option value="">All nodes</option>
+                {/* FIX 3: Added key fallback */}
                 {[...new Set(events.map((item) => item.node))].map((value) => (
-                  <option key={value}>{value}</option>
+                  <option key={value || "unknown"} value={value || "unknown"}>
+                    {value || "Unknown Node"}
+                  </option>
                 ))}
               </select>
             </label>
@@ -378,7 +398,8 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
     try {
       const farmer = await getCurrentFarmer();
       const image = file ? await toBase64(file) : null;
-      const categoryMap = { Wind: 1, Animal: 2, "Human Activity": 3, Other: 4 }; // Existing database/data.sql seed contract.
+      const categoryMap = { Wind: 1, Animal: 2, "Human Activity": 3, Other: 4 };
+
       await apiRequest(`/detections/${event.id}/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -390,6 +411,7 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
           image_base64: image,
         }),
       });
+
       if (mounted.current) {
         onSave(saveLocalFeedback(records, event.id, label, category, comment));
         setSaved(true);
@@ -521,7 +543,6 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
                   </label>
                 )}
 
-                {/* THIS IS THE NEW INPUT TO UPLOAD THE MONKEY IMAGE */}
                 <label className="d-field">
                   Upload feedback image (optional)
                   <input

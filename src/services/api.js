@@ -5,11 +5,11 @@ export const API_URL =
 export async function apiRequest(path, options = {}) {
   let response;
   const token = localStorage.getItem("token"); // Get JWT token for secure routes
-  
+
   const headers = {
     ...options.headers,
   };
-  
+
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -18,7 +18,6 @@ export async function apiRequest(path, options = {}) {
     response = await fetch(`${API_URL}${path}`, {
       ...options,
       headers,
-      credentials: "include",
       signal: AbortSignal.timeout(15000),
     });
   } catch {
@@ -26,13 +25,13 @@ export async function apiRequest(path, options = {}) {
       "Unable to reach the server. Please check your connection and try again.",
     );
   }
-  
+
   const body = await response.json().catch(() => ({}));
-  
+
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith("/auth/"))
       window.dispatchEvent(new Event("duriai:unauthorized"));
-      
+
     const error = new Error(
       body.error || "The request could not be completed. Please try again.",
     );
@@ -50,7 +49,7 @@ const post = (path, body) =>
   });
 
 // ==========================================
-// YOUR FRIEND'S AUTHENTICATION FUNCTIONS
+// AUTHENTICATION FUNCTIONS
 // ==========================================
 export const fetchAlerts = () => apiRequest("/detections");
 export const fetchStats = () => apiRequest("/analytics/stats");
@@ -80,7 +79,21 @@ export const clearFarmer = () => {
 };
 
 // ==========================================
-// YOUR AI TRAINING FUNCTIONS
+// AI TRAINING FUNCTIONS
 // ==========================================
 export const fetchTraining = () => apiRequest("/analytics/training");
-export const retrain = () => apiRequest("/analytics/retrain", { method: "POST" });
+export const retrain = () =>
+  apiRequest("/analytics/retrain", { method: "POST" });
+
+// ==========================================
+// COMPATIBILITY FOR DETECTIONS.JSX
+// ==========================================
+export const getCurrentFarmer = async () => {
+  try {
+    const session = await apiRequest("/auth/session");
+    return { farmer_id: session.farmer_id };
+  } catch (err) {
+    console.error("Failed to get current farmer:", err);
+    return { farmer_id: null };
+  }
+};
