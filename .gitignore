@@ -1,7 +1,10 @@
-﻿node_modules/
+node_modules/
 .env
 data.sql
 run_sql.js
 feedback_images/
 simulate_feedback.py
 test_monkey.png
+dist/
+build/
+*.log

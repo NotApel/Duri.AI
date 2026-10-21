@@ -1,4 +1,5 @@
-import { clearFarmer } from "../services/api";
+import { useContext, useRef, useState } from "react";
+import { AuthContext } from "../services/AuthContext";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -8,7 +9,7 @@ import {
   Settings,
   LogOut,
   TreeDeciduous,
-  Brain, // === NEW ADDITION: Imported Brain icon ===
+  Brain, // === NEW ADDITION ===
 } from "lucide-react";
 
 const navigation = [
@@ -25,7 +26,7 @@ const navigation = [
     mobile: "Logs",
     icon: ClipboardList,
   },
-  // === NEW ADDITION: Added AI Training route ===
+  // === NEW ADDITION ===
   { path: "/training", label: "AI Training", mobile: "AI", icon: Brain },
   { path: "/nodes", label: "Node Status", mobile: "Nodes", icon: Hexagon },
   { path: "/settings", label: "Settings", mobile: "Settings", icon: Settings },
@@ -33,6 +34,27 @@ const navigation = [
 
 export default function AppLayout() {
   const navigate = useNavigate();
+  const { logout, sessionError, refresh } = useContext(AuthContext);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const logoutPending = useRef(false);
+
+  async function handleLogout() {
+    if (logoutPending.current || !window.confirm("Log out of Duri.AI?")) return;
+    logoutPending.current = true;
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch (error) {
+      setLogoutError(error.message);
+    } finally {
+      logoutPending.current = false;
+      setLoggingOut(false);
+    }
+  }
+
   const links = (mobile = false) =>
     navigation.map(({ path, label, mobile: shortLabel, icon: Icon }) => (
       <NavLink
@@ -58,13 +80,11 @@ export default function AppLayout() {
         <nav aria-label="Main navigation">{links()}</nav>
         <button
           className="app-logout"
-          onClick={() => {
-            clearFarmer();
-            navigate("/login");
-          }}
+          onClick={handleLogout}
+          disabled={loggingOut}
         >
           <LogOut size={18} aria-hidden="true" />
-          Log out
+          {loggingOut ? "Logging out…" : "Log out"}
         </button>
       </aside>
       <header className="app-mobile-header">
@@ -74,12 +94,10 @@ export default function AppLayout() {
         </span>
         <button
           className="ui-button"
-          onClick={() => {
-            clearFarmer();
-            navigate("/login");
-          }}
+          onClick={handleLogout}
+          disabled={loggingOut}
         >
-          Log out
+          {loggingOut ? "Logging out…" : "Log out"}
         </button>
       </header>
       <main id="main-content" className="app-main">
@@ -88,6 +106,19 @@ export default function AppLayout() {
           Detection and training screens use backend records; hardware and model
           evaluation remain unverified.
         </p>
+        {sessionError && (
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {sessionError}{" "}
+            <button className="ui-button" onClick={refresh}>
+              Retry session check
+            </button>
+          </p>
+        )}
+        {logoutError && (
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {logoutError}
+          </p>
+        )}
         <Outlet />
       </main>
       <nav className="app-mobile-nav" aria-label="Mobile navigation">
