@@ -1,3 +1,4 @@
+import { clearFarmer } from "../services/api";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -55,7 +56,13 @@ export default function AppLayout() {
           DURI.AI
         </div>
         <nav aria-label="Main navigation">{links()}</nav>
-        <button className="app-logout" onClick={() => navigate("/login")}>
+        <button
+          className="app-logout"
+          onClick={() => {
+            clearFarmer();
+            navigate("/login");
+          }}
+        >
           <LogOut size={18} aria-hidden="true" />
           Log out
         </button>
@@ -65,14 +72,21 @@ export default function AppLayout() {
           <TreeDeciduous size={22} aria-hidden="true" />
           DURI.AI
         </span>
-        <button className="ui-button" onClick={() => navigate("/login")}>
+        <button
+          className="ui-button"
+          onClick={() => {
+            clearFarmer();
+            navigate("/login");
+          }}
+        >
           Log out
         </button>
       </header>
       <main id="main-content" className="app-main">
         <p className="ui-notice app-preview">
-          Development preview. Map positions, detections, and node updates are
-          simulated; hardware and retraining are not connected.
+          Development preview. Map positions and node updates are simulated.
+          Detection and training screens use backend records; hardware and model
+          evaluation remain unverified.
         </p>
         <Outlet />
       </main>

@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, Camera, RefreshCw } from "lucide-react";
 import "./Detections.css";
+import { fetchAlerts, apiRequest, getCurrentFarmer } from "../services/api";
 
 const statuses = {
   PENDING: "Candidate",
   VERIFYING: "Verifying",
-  VERIFIED: "Confirmed · AI",
+  VERIFIED: "Verified · backend status",
   REJECTED: "Rejected",
   FAILED: "Failed / unknown",
 };
@@ -56,45 +57,33 @@ export default function Detections({ mode = "map" }) {
   const [day, setDay] = useState("");
   const heading = useRef(null);
 
-  // Fetch REAL data from the backend
-  async function load() {
+  const loadRevision = useRef(0);
+  async function load(signal) {
+    const revision = ++loadRevision.current;
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:3000/api/detections");
-      if (!response.ok) throw new Error("Backend failed");
-      const data = await response.json();
-
-      // Map backend database rows to the UI's expected format
-      const mappedEvents = data.map((d) => ({
-        id: d.detection_id,
-        node: d.node_name || "NODE-01",
-        time: d.detection_at,
-        status: d.detection_status,
-        prediction: d.prediction === "DURIAN" ? "Durian" : "Not durian",
-        confidence: d.confidence,
-        amplitude: 0.81, // Mocked for UI since backend doesn't return reading data here
-        frequency: 18.0,
-        duration: 0.72,
-        camera: `Sensor reading from ${d.node_name || "Node"}`,
-      }));
-
-      setEvents(mappedEvents);
-      setLoadError("");
+      const data = await fetchAlerts({ signal });
+      if (revision === loadRevision.current) {
+        setEvents(data);
+        setLoadError("");
+      }
     } catch (err) {
-      setLoadError(
-        "Could not connect to backend. Make sure Node.js is running on port 3000.",
-      );
+      if (err.name !== "AbortError" && revision === loadRevision.current)
+        setLoadError(err.message);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted && revision === loadRevision.current)
+        setLoading(false);
     }
   }
-
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    const timer = setTimeout(() => load(controller.signal), 0);
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     return () => {
+      clearTimeout(timer);
+      controller.abort();
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
     };
@@ -104,12 +93,14 @@ export default function Detections({ mode = "map" }) {
     heading.current?.focus();
   }, [eventId]);
 
-  const event = events.find((item) => item.id == eventId);
+  const event = events.find((item) => item.id === eventId);
 
   const filtered = events.filter(
     (item) =>
       (view === "all" ||
-        (view === "reviewed" ? records[item.id] : !records[item.id])) &&
+        (view === "reviewed"
+          ? ["VERIFIED", "REJECTED"].includes(item.status)
+          : !["VERIFIED", "REJECTED"].includes(item.status))) &&
       (!query ||
         `${item.id} ${item.node} ${records[item.id]?.comment || ""}`
           .toLowerCase()
@@ -126,13 +117,17 @@ export default function Detections({ mode = "map" }) {
     <section className="detections">
       <div className="d-demo">
         <div>
-          <strong>Live Backend Mode</strong>
-          <span>Connected to PostgreSQL database · AI retraining enabled</span>
+          <strong>Backend records</strong>
+          <span>
+            Detection records from the API · hardware and training execution are
+            not verified by this screen
+          </span>
         </div>
       </div>
       {!online && (
         <p className="d-notice" role="status">
-          You’re offline. Viewing local data only.
+          You’re offline. Any displayed records may be stale; feedback requires
+          a connection.
         </p>
       )}
       <header className="d-heading">
@@ -167,7 +162,13 @@ export default function Detections({ mode = "map" }) {
             records={records}
             onSave={setRecords}
             basePath={basePath}
-            onRefresh={load}
+            onRefresh={(id, newStatus) =>
+              setEvents((current) =>
+                current.map((item) =>
+                  item.id === id ? { ...item, status: newStatus } : item,
+                ),
+              )
+            }
           />
         ) : (
           <div className="d-empty">
@@ -179,7 +180,11 @@ export default function Detections({ mode = "map" }) {
         <>
           <div className="d-summary">
             <strong>
-              {events.filter((item) => item.status === "PENDING").length}
+              {
+                events.filter(
+                  (item) => !["VERIFIED", "REJECTED"].includes(item.status),
+                ).length
+              }
             </strong>
             <span>events awaiting your review</span>
           </div>
@@ -259,7 +264,7 @@ export default function Detections({ mode = "map" }) {
             </button>
           </div>
           <p className="d-caption" aria-live="polite">
-            {filtered.length} events · real data from database
+            {filtered.length} events · records returned by the backend
           </p>
           <div className="d-list">
             {filtered.map((item) => (
@@ -286,7 +291,9 @@ export default function Detections({ mode = "map" }) {
                   <p className="d-caption">
                     {records[item.id]
                       ? feedbackLabels[records[item.id].label]
-                      : "Awaiting farmer review"}
+                      : ["VERIFIED", "REJECTED"].includes(item.status)
+                        ? "Backend reports this event as reviewed"
+                        : "Awaiting farmer review"}
                   </p>
                 </div>
                 <ArrowUpRight
@@ -327,9 +334,15 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const timer = useRef(null);
+  const mounted = useRef(false);
+  const pending = useRef(false);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Helper to convert file to base64
   const toBase64 = (file) =>
@@ -340,62 +353,54 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
       reader.onerror = (error) => reject(error);
     });
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
+    if (pending.current || saved) return;
+    if (!["confirmed", "rejected"].includes(label)) {
+      setError("Choose a classification.");
+      return;
+    }
     if (label === "rejected" && !category) {
       setError("Please select a false-alarm category.");
       return;
     }
-
+    if (
+      file &&
+      (!["image/jpeg", "image/png"].includes(file.type) ||
+        file.size > 5 * 1024 * 1024)
+    ) {
+      setError("Choose a JPEG or PNG image no larger than 5 MB.");
+      return;
+    }
+    pending.current = true;
     setSaving(true);
     setError("");
-    setSaved(false);
-
-    timer.current = setTimeout(async () => {
-      try {
-        let base64Image = null;
-        if (file) {
-          base64Image = await toBase64(file);
-        }
-
-        // Map category string to database category ID
-        const categoryMap = {
-          Wind: 1,
-          Animal: 2,
-          "Human Activity": 3,
-          Other: 4,
-        };
-
-        // CONNECT TO NODE.JS BACKEND
-        const response = await fetch(
-          `http://localhost:3000/api/detections/${event.id}/feedback`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              farmer_id: 1, // Assuming farmer 1 is logged in
-              category_id: category ? categoryMap[category] : null,
-              correct_detection: label === "confirmed",
-              comment_farmer: comment,
-              image_base64: base64Image,
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error("Backend rejected the feedback.");
-        }
-
-        // Save to local UI state and refresh the main list
+    try {
+      const farmer = await getCurrentFarmer();
+      const image = file ? await toBase64(file) : null;
+      const categoryMap = { Wind: 1, Animal: 2, "Human Activity": 3, Other: 4 }; // Existing database/data.sql seed contract.
+      await apiRequest(`/detections/${event.id}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          farmer_id: farmer.farmer_id,
+          category_id: label === "rejected" ? categoryMap[category] : null,
+          correct_detection: label === "confirmed",
+          comment_farmer: comment,
+          image_base64: image,
+        }),
+      });
+      if (mounted.current) {
         onSave(saveLocalFeedback(records, event.id, label, category, comment));
         setSaved(true);
-        if (onRefresh) onRefresh();
-      } catch (err) {
-        setError("Failed to connect to backend. Check if Node.js is running.");
-      } finally {
-        setSaving(false);
+        onRefresh?.(event.id, label === "confirmed" ? "VERIFIED" : "REJECTED");
       }
-    }, 250);
+    } catch (err) {
+      if (mounted.current) setError(err.message);
+    } finally {
+      pending.current = false;
+      if (mounted.current) setSaving(false);
+    }
   }
 
   return (
@@ -414,8 +419,16 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
           <p>{event.camera}</p>
           <div className="d-camera">
             <Camera size={38} aria-hidden="true" />
-            <strong>AI Prediction: {event.prediction}</strong>
-            <p>Confidence: {event.confidence}%</p>
+            <strong>
+              Backend prediction: {event.prediction || "Unavailable"}
+            </strong>
+            <p>
+              Confidence:{" "}
+              {event.confidence === null
+                ? "Unavailable"
+                : `${event.confidence}%`}
+            </p>
+            <p>Camera image unavailable.</p>
           </div>
           <dl className="d-facts">
             <div>
@@ -430,15 +443,27 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
           <h3>Vibration evidence</h3>
           <div className="d-measurements">
             <div>
-              <strong>{event.amplitude} g</strong>
+              <strong>
+                {event.amplitude === null
+                  ? "Unavailable"
+                  : `${event.amplitude} g`}
+              </strong>
               <span>Amplitude</span>
             </div>
             <div>
-              <strong>{event.frequency} Hz</strong>
+              <strong>
+                {event.frequency === null
+                  ? "Unavailable"
+                  : `${event.frequency} Hz`}
+              </strong>
               <span>Frequency</span>
             </div>
             <div>
-              <strong>{event.duration} s</strong>
+              <strong>
+                {event.duration === null
+                  ? "Unavailable"
+                  : `${event.duration} s`}
+              </strong>
               <span>Duration</span>
             </div>
           </div>
@@ -446,14 +471,14 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
 
         <aside className="d-feedback">
           <h2>Your feedback</h2>
-          {event.status !== "PENDING" && !previous ? (
+          {["VERIFIED", "REJECTED"].includes(event.status) && !previous ? (
             <div className="d-notice">
               <strong>This event has already been reviewed.</strong>
               <p>Status: {event.status}</p>
             </div>
           ) : (
             <form onSubmit={submit}>
-              <fieldset disabled={saving}>
+              <fieldset disabled={saving || saved}>
                 <legend>How would you classify this event?</legend>
                 {[
                   ["confirmed", "Confirm durian"],
@@ -498,16 +523,18 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
 
                 {/* THIS IS THE NEW INPUT TO UPLOAD THE MONKEY IMAGE */}
                 <label className="d-field">
-                  Upload Camera Image (Simulate Pi)
+                  Upload feedback image (optional)
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png"
                     onChange={(e) => {
-                      setFile(e.target.files[0]);
+                      setFile(e.target.files[0] || null);
                       setSaved(false);
                     }}
                     style={{
                       display: "block",
+                      width: "100%",
+                      minWidth: 0,
                       marginTop: "8px",
                       padding: "8px",
                       background: "#f4f4f4",
@@ -531,7 +558,11 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
                   />
                 </label>
                 <button className="d-primary" type="submit">
-                  {saving ? "Sending to Backend..." : "Submit Feedback"}
+                  {saving
+                    ? "Submitting…"
+                    : saved
+                      ? "Feedback submitted"
+                      : "Submit Feedback"}
                 </button>
               </fieldset>
             </form>
@@ -543,8 +574,8 @@ function EventDetails({ event, records, onSave, basePath, onRefresh }) {
           )}
           {saved && (
             <p className="d-success" role="status">
-              ✅ Feedback saved to Database! Image sent to backend for AI
-              retraining.
+              Feedback accepted by the backend. Training queue insertion and
+              model retraining are not verified.
             </p>
           )}
         </aside>

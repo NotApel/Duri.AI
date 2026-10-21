@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { demoDetections } from "../data/demoDetections";
+import { apiRequest, fetchTraining } from "../services/api";
 import HarvestChart from "./HarvestChart";
 
 const demoNodes = [
@@ -48,20 +49,17 @@ export default function DashboardHome() {
     const controller = new AbortController();
     async function load() {
       try {
-        const read = async (path) => {
-          const response = await fetch(`http://localhost:3000/api/${path}`, {
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error("Request failed");
-          return response.json();
-        };
+        const read = (path) =>
+          apiRequest(`/${path}`, { signal: controller.signal });
 
-        // === NEW ADDITION: Added trainingStats to the fetch ===
-        const [detections, stats, nodes, trainingStats] = await Promise.all([
+        // Optional training statistics must not delay core orchard data.
+        const training = fetchTraining({ signal: controller.signal }).catch(
+          () => null,
+        );
+        const [detections, stats, nodes] = await Promise.all([
           read("detections"),
           read("analytics/stats"),
           read("plots/1/nodes"),
-          read("analytics/training"),
         ]);
 
         if (
@@ -71,8 +69,14 @@ export default function DashboardHome() {
         )
           throw new Error("Unexpected response");
 
-        // === NEW ADDITION: Added trainingStats to the state ===
-        setData({ detections, stats, nodes, trainingStats });
+        if (controller.signal.aborted) return;
+        setData({ detections, stats, nodes, trainingStats: null });
+        training.then((trainingStats) => {
+          if (!controller.signal.aborted)
+            setData((current) =>
+              current ? { ...current, trainingStats } : current,
+            );
+        });
       } catch (err) {
         if (err.name !== "AbortError")
           setError(
@@ -161,17 +165,19 @@ export default function DashboardHome() {
 
             {/* === NEW ADDITION: 3 New Cards for AI Stats === */}
             <div>
-              <dt>Farmer Points</dt>
-              <dd>{data.trainingStats?.farmerPoints || 0}</dd>
+              <dt>Feedback points · backend calculation</dt>
+              <dd>{data.trainingStats?.farmerPoints ?? "Unavailable"}</dd>
             </div>
             <div>
-              <dt>AI Corrections</dt>
-              <dd>{data.trainingStats?.totalCorrections || 0}</dd>
+              <dt>Feedback records</dt>
+              <dd>{data.trainingStats?.totalCorrections ?? "Unavailable"}</dd>
             </div>
             <div>
-              <dt>AI Accuracy</dt>
-              <dd style={{ color: "var(--canopy)", fontWeight: "bold" }}>
-                {data.trainingStats?.currentAccuracy || 0}%
+              <dt>Evaluated AI accuracy</dt>
+              <dd style={{ color: "var(--ui-green)", fontWeight: "bold" }}>
+                {data.trainingStats?.accuracy == null
+                  ? "Unavailable"
+                  : `${data.trainingStats.accuracy}%`}
               </dd>
             </div>
             {/* === END NEW ADDITION === */}

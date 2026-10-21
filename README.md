@@ -160,3 +160,10 @@ Desktop pages use a shared CSS Grid layout: sidebar/content tracks, a 12-column
 dashboard with recent detections beside the chart, and a map/detection split on
 wide screens. Tablet and phone layouts reduce columns without hiding content.
 Harvest Logs keeps its four-column table and responsive export toolbar.
+
+## Self-learning frontend integration
+
+See [the frontend integration notes](docs/frontend-self-learning.md) for shared
+backend detection records, farmer feedback identity, training metric provenance,
+and the backend handoff. Main's session-authentication work is not merged into
+this feature branch by these changes.
