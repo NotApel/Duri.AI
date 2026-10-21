@@ -12,7 +12,11 @@ dotenv.config();
 
 const app = express();     // <--- PASTIKAN BARIS INI ADA
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Rate limiter
@@ -154,6 +158,23 @@ res.json({
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// Check current session
+app.get("/api/auth/session", auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT farmer_id, full_name, username, email, phone_number FROM farmer WHERE farmer_id = $1",
+      [req.farmer.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Farmer not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Session error:", error);
+    res.status(500).json({ error: "Failed to get session" });
   }
 });
 
