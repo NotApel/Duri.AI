@@ -1,9 +1,0 @@
-# Environment
-.env
-backend/.env
-
-# Dependencies
-node_modules
-
-# Logs
-*.log

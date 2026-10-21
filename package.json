@@ -12,6 +12,9 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
     "express-rate-limit": "^8.7.1",
+    "bcrypt": "^6.0.0",
+    "express-rate-limit": "^8.7.1",
+    "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "leaflet": "^1.9.4",

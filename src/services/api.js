@@ -1,56 +1,48 @@
-// src/services/api.js
-const API_URL = "http://localhost:3000/api";
-
-// ============ ALERTS ============
-export const fetchAlerts = async () => {
-  const response = await fetch(`${API_URL}/detections`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch alerts");
+// Set VITE_API_URL for a deployed API. The default follows the browser hostname.
+export const API_URL =
+  import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3000/api`;
+export async function apiRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(15000),
+      ...options,
+    });
+  } catch {
+    throw new Error(
+      "Unable to reach the server. Please check your connection and try again.",
+    );
   }
-  return response.json();
-};
-
-// ============ STATS ============
-export const fetchStats = async () => {
-  const response = await fetch(`${API_URL}/analytics/stats`);
+  const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error("Failed to fetch stats");
+    if (response.status === 401 && !path.startsWith("/auth/"))
+      window.dispatchEvent(new Event("duriai:unauthorized"));
+    const error = new Error(
+      body.error || "The request could not be completed. Please try again.",
+    );
+    error.status = response.status;
+    throw error;
   }
-  return response.json();
-};
-
-// ============ HEALTH ============
-export const fetchHealth = async () => {
-  const response = await fetch(`${API_URL}/health`);
-  if (!response.ok) {
-    throw new Error("Failed to check health");
-  }
-  return response.json();
-};
-
-// ============ AUTH ============
-export const loginFarmer = async (email, password_hash) => {
-  const response = await fetch(`${API_URL}/auth/login`, {
+  return body;
+}
+const post = (path, body) =>
+  apiRequest(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password_hash }),
+    body: JSON.stringify(body),
   });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Login failed");
+export const fetchAlerts = () => apiRequest("/detections");
+export const fetchStats = () => apiRequest("/analytics/stats");
+export const fetchHealth = () => apiRequest("/health");
+export const loginFarmer = async (username, password) => {
+  const response = await post("/auth/login", { username, password });
+  if (response.token) {
+    localStorage.setItem("token", response.token);
+    localStorage.setItem("farmer", JSON.stringify(response.farmer));
   }
-  return response.json();
+  return response;
 };
-
-export const registerFarmer = async (farmerData) => {
-  const response = await fetch(`${API_URL}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(farmerData),
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Registration failed");
-  }
-  return response.json();
-};
+export const registerFarmer = (farmer) => post("/auth/register", farmer);
+export const getSession = () => apiRequest("/auth/session");
+export const logoutFarmer = () => post("/auth/logout", {});
