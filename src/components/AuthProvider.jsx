@@ -42,12 +42,17 @@ export default function AuthProvider({ children }) {
     const onFocus = () => {
       refresh();
     };
+    const onStorage = (event) => {
+      if (event.key === "token" || event.key === null) refresh();
+    };
+    window.addEventListener("storage", onStorage);
     window.addEventListener("duriai:unauthorized", expire);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onFocus);
     return () => {
       clearTimeout(timer);
       invalidate();
+      window.removeEventListener("storage", onStorage);
       window.removeEventListener("duriai:unauthorized", expire);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onFocus);
