@@ -10,13 +10,16 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.1",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.9",
+    "nodemon": "^1.14.10",
     "prisma": "^5.22.0"
   },
   "keywords": [],
