@@ -1,30 +1,18 @@
 // backend/app.js
 const express = require("express");
-const bcrypt = require("bcrypt");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { Pool } = require("pg");
-const jwt = require('jsonwebtoken');
-const auth = require('./middleware/auth');
-const rateLimit = require('express-rate-limit');
+const { createAuth, migrateAuth } = require("./auth");
 
 dotenv.config();
 
 const app = express();     // <--- PASTIKAN BARIS INI ADA
 
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true
-}));
-
+const frontendOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173")
+  .split(",").map(origin => origin.trim()).filter(Boolean);
+app.use(cors({ origin: frontendOrigins, credentials: true }));
 app.use(express.json());
-
-// Rate limiter
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: "Too many login attempts, please try again after 15 minutes" }
-});
 
 // Middleware untuk ESP32 (Device API Key)
 const deviceAuth = (req, res, next) => {
@@ -43,6 +31,9 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || "postgres",
   port: process.env.DB_PORT || 5432,
 });
+
+const { router: authRouter, authenticate: auth } = createAuth(pool);
+app.use("/api/auth", authRouter);
 
 // Health check endpoint
 app.get("/api/health", async (req, res) => {
@@ -63,120 +54,6 @@ app.get("/api/health", async (req, res) => {
 // ============================================================
 // AUTHENTICATION ENDPOINTS
 // ============================================================
-
-// Register a new farmer
-app.post("/api/auth/register", async (req, res) => {
-  try {
-    const { full_name, username, email, password, phone_number } = req.body;
-
-    if (!full_name || !username || !email || !password || !phone_number) {
-      return res.status(400).json({
-        error: "All fields are required",
-      });
-    }
-
-    const password_hash = await bcrypt.hash(password, 10);
-
-    const result = await pool.query(
-      `INSERT INTO farmer
-        (full_name, username, email, password_hash, phone_number)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING farmer_id, full_name, username, email, phone_number, created_at, updated_at`,
-      [full_name, username, email, password_hash, phone_number]
-    );
-
-    const newFarmer = result.rows[0];
-const token = jwt.sign(
-  { id: newFarmer.farmer_id, username: newFarmer.username },
-  process.env.JWT_SECRET,
-  { expiresIn: '7d' }
-);
-
-res.status(201).json({
-  message: "Farmer registered successfully",
-  token: token,
-  farmer: newFarmer,
-});
-  } catch (error) {
-    console.error("Register error:", error);
-
-    if (error.code === "23505") {
-      if (error.constraint === "farmer_username_key") {
-        return res.status(400).json({ error: "Username already registered" });
-      }
-      if (error.constraint === "farmer_email_key") {
-        return res.status(400).json({ error: "Email already registered" });
-      }
-    }
-
-    res.status(500).json({ error: "Registration failed" });
-  }
-});
-
-// Login farmer
-app.post("/api/auth/login", loginLimiter , async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({
-        error: "Username and password are required",
-      });
-    }
-
-    const result = await pool.query(
-      `SELECT farmer_id, full_name, username, email, password_hash, phone_number, created_at, updated_at
-       FROM farmer
-       WHERE username = $1`,
-      [username]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const farmer = result.rows[0];
-    const passwordMatch = await bcrypt.compare(password, farmer.password_hash);
-
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    delete farmer.password_hash;
-
-const token = jwt.sign(
-  { id: farmer.farmer_id, username: farmer.username },
-  process.env.JWT_SECRET,
-  { expiresIn: '7d' }
-);
-
-res.json({
-  message: "Login successful",
-  token: token,
-  farmer: farmer,
-});
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-// Check current session
-app.get("/api/auth/session", auth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT farmer_id, full_name, username, email, phone_number FROM farmer WHERE farmer_id = $1",
-      [req.farmer.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Farmer not found" });
-    }
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Session error:", error);
-    res.status(500).json({ error: "Failed to get session" });
-  }
-});
 
 // ============================================================
 // 1. FARMER ENDPOINTS (Table: farmer)
@@ -693,85 +570,6 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
 });
 
 // ============================================================
-// 14. PASSWORD RESET ENDPOINTS
-// ============================================================
-
-// Simpan OTP dalam memori (untuk demo FYP)
-const resetCodes = {};
-
-// 1. Minta Reset Password (Hantar OTP)
-app.post("/api/auth/forgot-password", async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
-    }
-
-    // Check email wujud tak
-    const result = await pool.query("SELECT farmer_id FROM farmer WHERE email = $1", [email]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Email not found" });
-    }
-
-    // Jana 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    resetCodes[email] = otp;
-
-    // SIMULASI: Print dalam terminal (bukan hantar email betul)
-    console.log(`\n📧 [SIMULASI EMAIL] OTP untuk ${email} ialah: ${otp}\n`);
-
-    res.json({ 
-      message: "If the email exists, an OTP has been sent to your email.",
-      // Untuk FYP demo, kita bagi OTP dalam response (biar cikgu nampak)
-      demo_otp: otp 
-    });
-
-  } catch (error) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({ error: "Failed to process request" });
-  }
-});
-
-// 2. Reset Password Guna OTP
-app.post("/api/auth/reset-password", async (req, res) => {
-  try {
-    const { email, otp, new_password } = req.body;
-
-    if (!email || !otp || !new_password) {
-      return res.status(400).json({ error: "Email, OTP, and new password are required" });
-    }
-
-    // Check OTP betul ke tak
-    if (!resetCodes[email] || resetCodes[email] !== otp) {
-      return res.status(400).json({ error: "Invalid or expired OTP" });
-    }
-
-    // Hash password baru
-    const password_hash = await bcrypt.hash(new_password, 10);
-
-    // Update database
-    const result = await pool.query(
-      "UPDATE farmer SET password_hash = $1, updated_at = NOW() WHERE email = $2 RETURNING farmer_id",
-      [password_hash, email]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Farmer not found" });
-    }
-
-    // Padam OTP dari memori
-    delete resetCodes[email];
-
-    res.json({ message: "Password reset successful. You can now login with new password." });
-
-  } catch (error) {
-    console.error("Reset password error:", error);
-    res.status(500).json({ error: "Failed to reset password" });
-  }
-});
-
-// ============================================================
 // 404 NOT FOUND & ERROR HANDLER
 // ============================================================
 app.use((req, res) => {
@@ -779,6 +577,7 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
   console.error("Unhandled Error:", err.stack);
   res.status(500).json({ error: "Something went wrong on the server" });
 });
@@ -787,6 +586,19 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Duri.AI Backend running at http://localhost:${PORT}`);
-});
+async function start() {
+  try {
+    await migrateAuth(pool);
+    app.listen(PORT, () => console.log(`Duri.AI Backend running at http://localhost:${PORT}`));
+  } catch (error) {
+    const guidance = error.code === "23505"
+      ? "Existing usernames or emails collide when lowercased. Resolve those duplicates before restarting. No migration changes were applied."
+      : error.code === "42P01"
+        ? "The farmer table is missing. Apply the repository database schema before restarting."
+        : "Check the database connection and schema permissions. The authentication migration was rolled back.";
+    console.error(`Authentication schema setup failed (${error.code || "unknown"}). ${guidance}`);
+    await pool.end();
+    process.exitCode = 1;
+  }
+}
+start();
