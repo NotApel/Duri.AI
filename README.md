@@ -76,3 +76,12 @@ Copy `.env.example` to `.env.local` and set `VITE_PLOT_ID` to an existing plot I
 ## 📄 License
 
 This project is developed as a Final Year Project (FYP) at the German-Malaysian Institute (GMI).
+
+
+## Authentication and existing databases
+
+See [authentication setup](docs/authentication.md) for local configuration,
+registration/login/logout, and the automatic migration that fixes older farmer
+tables missing `username`. Keep existing farmer records; do not drop or recreate
+your database to resolve error 42703. The backend requires `JWT_SECRET` and the
+existing `DB_*` settings before startup.

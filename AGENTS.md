@@ -54,7 +54,7 @@ The interface should feel designed specifically for **durian harvesting in Malay
 You tend to converge toward generic, "on distribution" outputs. In frontend design,this creates what users call the "AI slop" aesthetic. Avoid this: make creative,distinctive frontends that surprise and delight. 
 
 Focus on:
-- Typography: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics.
+- Typography: Use Montserrat as the standard font for headings, interface text, and numeric telemetry. Reuse the existing `--font-sans` token in `src/index.css`; use weight, size, spacing, and hierarchy to create distinction rather than introducing another font.
 - Color & Theme: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes. Use IDE themes and cultural aesthetics for inspiration.
 - Motion: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions.
 - Backgrounds: Create atmosphere and depth rather than defaulting to solid colors. Layer CSS gradients, use geometric patterns, or add contextual effects that match the overall aesthetic.
@@ -72,7 +72,7 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 
 - Choose a clear visual concept before building a screen. Orchard canopy, durian rind and flesh, soil, field equipment, topographic orchard maps, and field-note markings can inspire the system without becoming literal decoration everywhere.
 - Use a coherent palette expressed through CSS custom properties/design tokens. A possible starting point is canopy green, deep soil/charcoal, durian-flesh cream, and a restrained rind-lime accent; adapt it to the screen's purpose and verify contrast. Do not apply every colour to every component.
-- Pick a purposeful type pairing for display, interface text, and numeric telemetry. Avoid defaulting to the same popular font pair on every page. Ensure the fonts have the required glyph coverage, load reliably, and remain legible at small sizes.
+- Keep Montserrat consistent across existing and new screens, including detection headings and measurements. Ensure font weights load reliably and text remains legible at small sizes. Keep the existing fallback stack for when Montserrat is unavailable.
 - Create depth through considered layering, subtle grain or contour-line motifs, orchard-map details, or gradients that support the content. Do not reduce readability or battery/performance on mobile for decoration.
 - Use intentional composition and hierarchy rather than automatically placing every metric inside an identical card. Reserve prominent emphasis for genuinely important alerts and decisions.
 - Motion should explain state or add delight: use a restrained page-entry sequence, clear verification transitions, and meaningful feedback states. Respect `prefers-reduced-motion`; avoid animation that delays urgent information or causes repeated movement near alerts.

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Plaster&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -50,15 +50,5 @@
 }
 
 :root {
-  --color-cream: #fbf5dd;
-  --color-muted-cream: #e7e1b1;
-  --color-orchard: #306d29;
-  --color-deep-orchard: #0d530e;
-  --color-ink: #fbf5dd;
-}
-
-body {
-  font-family: var(--font-sans);
-  background-color: var(--color-deep-orchard);
-  color: var(--color-ink);
+  --font-sans: "Montserrat", system-ui, sans-serif;
 }

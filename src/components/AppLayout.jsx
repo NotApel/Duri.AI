@@ -1,20 +1,64 @@
+import { useContext, useRef, useState } from "react";
+import { AuthContext } from "../services/AuthContext";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  ClipboardList, 
-  Map, 
-  Hexagon, 
-  Settings, 
-  LogOut 
+import {
+  LayoutDashboard,
+  ClipboardList,
+  Map,
+  Hexagon,
+  Settings,
+  LogOut,
+  TreeDeciduous,
 } from "lucide-react";
-
+const navigation = [
+  {
+    path: "/dashboard",
+    label: "Dashboard",
+    mobile: "Home",
+    icon: LayoutDashboard,
+  },
+  { path: "/map", label: "Orchard Map", mobile: "Map", icon: Map },
+  {
+    path: "/analytics",
+    label: "Harvest Logs",
+    mobile: "Logs",
+    icon: ClipboardList,
+  },
+  { path: "/nodes", label: "Node Status", mobile: "Nodes", icon: Hexagon },
+  { path: "/settings", label: "Settings", mobile: "Settings", icon: Settings },
+];
 export default function AppLayout() {
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    navigate("/login");
-  };
-
+  const { logout, sessionError, refresh } = useContext(AuthContext);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const logoutPending = useRef(false);
+  async function handleLogout() {
+    if (logoutPending.current || !window.confirm("Log out of Duri.AI?")) return;
+    logoutPending.current = true;
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch (error) {
+      setLogoutError(error.message);
+    } finally {
+      logoutPending.current = false;
+      setLoggingOut(false);
+    }
+  }
+  const links = (mobile = false) =>
+    navigation.map(({ path, label, mobile: shortLabel, icon: Icon }) => (
+      <NavLink
+        key={path}
+        to={path}
+        className={({ isActive }) => `app-nav-link${isActive ? " active" : ""}`}
+      >
+        <Icon size={18} aria-hidden="true" />
+        <span>{mobile ? shortLabel : label}</span>
+      </NavLink>
+    ));
   return (
     /* MAIN BACKGROUND (bg-yellow-100) */
     <div className="flex flex-col md:flex-row min-h-screen bg-yellow-100 text-slate-100 font-sans">
@@ -92,88 +136,61 @@ export default function AppLayout() {
             <LogOut className="w-5 h-5" />
             Logout
           </button>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <aside className="app-sidebar">
+        <div className="app-brand">
+          <TreeDeciduous size={22} aria-hidden="true" />
+          DURI.AI
         </div>
-      </aside>
-
-      {/* MOBILE TOP HEADER BACKGROUND (bg-green-700) */}
-      <header className="md:hidden bg-green-700 px-5 py-3 flex justify-between items-center border-b border-emerald-900/30 sticky top-0 z-40 shadow-md">
-        <div className="flex items-center space-x-2">
-          <span className="text-xl">🌳</span>
-          <span className="text-lg font-bold text-emerald-100 tracking-wide">DURI.AI</span>
-        </div>
+        <nav aria-label="Main navigation">{links()}</nav>
         <button
+          className="app-logout"
           onClick={handleLogout}
-          className="text-rose-400 hover:text-rose-300 px-2 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+          disabled={loggingOut}
         >
-          <LogOut className="w-4 h-4" />
-          Logout
+          <LogOut size={18} aria-hidden="true" />
+          {loggingOut ? "Logging out…" : "Log out"}
+        </button>
+      </aside>
+      <header className="app-mobile-header">
+        <span className="app-brand">
+          <TreeDeciduous size={22} aria-hidden="true" />
+          DURI.AI
+        </span>
+        <button
+          className="ui-button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+        >
+          {loggingOut ? "Logging out…" : "Log out"}
         </button>
       </header>
-
-      {/* MAIN CONTENT AREA */}
-      <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto max-w-8xl mx-auto w-full">
+      <main id="main-content" className="app-main">
+        <p className="ui-notice app-preview">
+          Development preview. Map positions, detections, and node updates are
+          simulated; hardware and retraining are not connected.
+        </p>
+        {sessionError && (
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {sessionError}{" "}
+            <button className="ui-button" onClick={refresh}>
+              Retry session check
+            </button>
+          </p>
+        )}
+        {logoutError && (
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {logoutError}
+          </p>
+        )}
         <Outlet />
       </main>
-
-      {/* MOBILE BOTTOM NAV BACKGROUND (bg-emerald-950/95) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-emerald-950/95 backdrop-blur-md border-t border-emerald-900/40 flex justify-around items-center py-2 px-1 z-50 shadow-lg">
-        <NavLink
-          to="/dashboard"
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] transition px-2 py-1 ${
-              isActive ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
-            }`
-          }
-        >
-          <LayoutDashboard className="w-5 h-5" />
-          <span>Dashboard</span>
-        </NavLink>
-        <NavLink
-          to="/map"
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] transition px-2 py-1 ${
-              isActive ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
-            }`
-          }
-        >
-          <Map className="w-5 h-5" />
-          <span>Map</span>
-        </NavLink>
-        <NavLink
-          to="/analytics"
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] transition px-2 py-1 ${
-              isActive ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
-            }`
-          }
-        >
-          <ClipboardList className="w-5 h-5" />
-          <span>Analytics</span>
-        </NavLink>
-        <NavLink
-          to="/nodes"
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] transition px-2 py-1 ${
-              isActive ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
-            }`
-          }
-        >
-          <Hexagon className="w-5 h-5" />
-          <span>Nodes</span>
-        </NavLink>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] transition px-2 py-1 ${
-              isActive ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
-            }`
-          }
-        >
-          <Settings className="w-5 h-5" />
-          <span>Settings</span>
-        </NavLink>
+      <nav className="app-mobile-nav" aria-label="Mobile navigation">
+        {links(true)}
       </nav>
-
     </div>
   );
 }

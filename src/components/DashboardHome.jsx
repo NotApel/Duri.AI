@@ -1,5 +1,9 @@
 // src/components/DashboardHome.jsx
 import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { demoDetections } from "../data/demoDetections";
+import { apiRequest } from "../services/api";
 import HarvestChart from "./HarvestChart";
 import { fetchAlerts, fetchNodes, fetchStats } from "../services/api";
 
@@ -21,173 +25,264 @@ function buildSectors(nodes, detections) {
   }));
 }
 
+const demoNodes = [
+  {
+    node_id: "SIM-NODE-01",
+    node_name: "SIM-NODE-01",
+    status: "ONLINE",
+    battery_level: 84,
+  },
+  {
+    node_id: "SIM-NODE-02",
+    node_name: "SIM-NODE-02",
+    status: "ONLINE",
+    battery_level: 92,
+  },
+  {
+    node_id: "SIM-NODE-03",
+    node_name: "SIM-NODE-03",
+    status: "OFFLINE",
+    battery_level: 11,
+  },
+];
+const demoData = {
+  detections: demoDetections.map((event) => ({
+    ...event,
+    node_name: event.node,
+  })),
+  stats: {
+    total: demoDetections.length,
+    verified: demoDetections.filter((event) => event.status === "VERIFIED")
+      .length,
+  },
+  nodes: demoNodes,
+};
+
 export default function DashboardHome() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const [stats, setStats] = useState({
-    totalDrops: 0,
-    networkVitality: { online: 0, total: 0 },
-  });
-  const [sectors, setSectors] = useState([]);
-
+  const [mode, setMode] = useState("simulation");
+  const [search, setSearch] = useState("");
+  const [liveData, setData] = useState(null);
+  const data = mode === "simulation" ? demoData : liveData;
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    let active = true;
-    const fetchData = async () => {
+    if (mode !== "live") return;
+    const controller = new AbortController();
+    async function load() {
       try {
-        setLoading(true);
-        setError(null);
-        const [detections, nodes, summary] = await Promise.all([
-          fetchAlerts(), fetchNodes(plotId), fetchStats(),
+        const read = (path) =>
+          apiRequest(`/${path}`, { signal: controller.signal });
+        const [detections, stats, nodes] = await Promise.all([
+          read("detections"),
+          read("analytics/stats"),
+          read("plots/1/nodes"),
         ]);
-        if (!Array.isArray(detections) || !Array.isArray(nodes) || !Number.isFinite(summary?.verified)) {
-          throw new Error("Unexpected dashboard data");
-        }
-        if (!active) return;
-        setStats({
-          totalDrops: summary.verified,
-          networkVitality: {
-            online: nodes.filter((node) => node.status === "ONLINE").length,
-            total: nodes.length,
-          },
-        });
-        setSectors(buildSectors(nodes, detections));
+        if (
+          !Array.isArray(detections) ||
+          !Array.isArray(nodes) ||
+          typeof stats.total !== "number"
+        )
+          throw new Error("Unexpected response");
+        setData({ detections, stats, nodes });
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-        if (active) setError("Could not load orchard data. Check the connection and try again.");
-      } finally {
-        if (active) setLoading(false);
+        if (err.name !== "AbortError")
+          setError(
+            "Orchard data is unavailable. Check that the backend and database are running, then try again.",
+          );
       }
-    };
-
-    fetchData();
-    return () => { active = false; };
-  }, []);
-
-  // Dynamic search bar filtering
-  const filteredSectors = sectors.filter(
-    (sector) =>
-      sector.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(sector.id).toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-400 text-lg">Loading orchard data...</p>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-red-400 text-lg">⚠️ {error}</p>
-      </div>
-    );
-  }
-
+    }
+    load();
+    return () => controller.abort();
+  }, [attempt, mode]);
+  const nodes =
+    data?.nodes.filter((node) =>
+      `${node.node_name}`.toLowerCase().includes(search.toLowerCase()),
+    ) || [];
   return (
-    <div className="space-y-8">
-      {/* SECTION 1: GLOBAL HEADER SEARCH BAR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl  bg-green-500 shadow-md">
-        <div>
-          <h1 className="text-2xl font-black text-neutral-50">
-            Welcome back, Admin!
-          </h1>
-          <p className="text-xs text-neutral-50 mt-0.5">
-            Monitor and manage your orchard's infrastructure and harvest data.
-          </p>
-        </div>
-        <div className="relative w-full md:w-72">
-          <span className="absolute left-3.5 top-3 text-slate-500 text-sm">
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Search nodes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-neutral-50 text-slate-950 text-xs rounded-xl pl-10 pr-4 py-3 border border-slate-800 focus:outline-none focus:border-emerald-500 transition"
-          />
-        </div>
+    <div className="ui-page dashboard-grid">
+      <header className="ui-page-header">
+        <h1>Dashboard</h1>
+        <Link className="ui-button" to="/map">
+          Open Orchard Map
+        </Link>
+      </header>
+      <div className="ui-page-header">
+        <label className="ui-field" htmlFor="dashboard-source">
+          Data source
+          <select
+            id="dashboard-source"
+            value={mode}
+            onChange={(event) => {
+              setMode(event.target.value);
+              setError("");
+              setData(null);
+            }}
+          >
+            <option value="simulation">Simulation · presentation data</option>
+            <option value="live">Backend · database records</option>
+          </select>
+        </label>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* SECTION 2: SUMMARY OF ALL SECTIONS */}
-        <div className="lg:col-span-2 space-y-5">
-          <h3 className="shadow-md text-2xl bg-green-500 rounded-lg p-1 font-bold text-neutral-50 uppercase tracking-widest text-center">
-            Orchard Infrastructure Summary
-          </h3>
-
-          {/* Quick Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="shadow-md bg-yellow-50 border border-slate-700/50 p-5 rounded-2xl">
-              <span className="text-xl">🍈</span>
-              <h4 className="text-xs text-slate-900 mt-2 font-medium">
-                Verified Drops
-              </h4>
-              <p className="text-2xl font-black text-green-700 mt-0.5">
-                {stats.totalDrops} Drops
-              </p>
+      {mode === "simulation" && (
+        <p className="ui-notice">
+          <strong>Simulation mode.</strong> Events, node status, battery levels,
+          and weekly chart values are sample data for your presentation. No
+          backend is required.
+        </p>
+      )}
+      {mode === "live" && error ? (
+        <section className="ui-panel">
+          <h2>Unable to load orchard data</h2>
+          <p className="ui-notice ui-error mb-4" role="alert">
+            {error}
+          </p>
+          <button
+            className="ui-button"
+            onClick={() => {
+              setError("");
+              setData(null);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </section>
+      ) : !data ? (
+        <p className="ui-notice" role="status">
+          Loading orchard data…
+        </p>
+      ) : (
+        <>
+          <dl className="ui-summary">
+            <div>
+              <dt>Total events</dt>
+              <dd>{data.stats.total}</dd>
             </div>
-            <div className="shadow-md bg-yellow-50 border border-slate-700/50 p-5 rounded-2xl">
-              <span className="text-xl">🔋</span>
-              <h4 className="text-xs text-slate-900 mt-2 font-medium">
-                Network Vitality
-              </h4>
-              <p className="text-2xl font-black text-green-700 mt-0.5">
-                {stats.networkVitality.online} / {stats.networkVitality.total} Online
-              </p>
+            <div>
+              <dt>Verified events</dt>
+              <dd>{data.stats.verified ?? "Unavailable"}</dd>
             </div>
+            <div>
+              <dt>Online nodes · Plot 1</dt>
+              <dd>
+                {data.nodes.filter((node) => node.status === "ONLINE").length} /{" "}
+                {data.nodes.length}
+              </dd>
+            </div>
+          </dl>
+          <div className="ui-page-header">
+            <h2>Sensor nodes · Plot 1</h2>
+            <label className="ui-field" htmlFor="node-search">
+              Search nodes
+              <input
+                id="node-search"
+                type="search"
+                className="ui-input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Node name"
+              />
+            </label>
           </div>
-
-          {/* Render Filtered Search Results */}
-          <div className="bg-yellow-50 border border-slate-700/50 rounded-2xl p-5 space-y-3 shadow-lg">
-            <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Node Overview
-            </h4>
-            <div className="space-y-2">
-              {filteredSectors.length > 0 ? (
-                filteredSectors.map((sector) => (
-                  <div
-                    key={sector.id}
-                    className="bg-green-700 p-3 rounded-xl flex justify-between items-center text-xs border border-slate-900"
-                  >
-                    <div>
-                      <p className="font-bold text-slate-100">{sector.name}</p>
-                      <p className="text-slate-300 mt-0.5">
-                        Hardware ID: {sector.id}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${sector.health === "Online" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}
-                      >
-                        {sector.health}
-                      </span>
-                      <p className="text-slate-400 font-semibold mt-1">
-                        {sector.drops} recent verified
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-500 py-2 text-center">
-                  No nodes match your search, or none are registered for this plot.
-                </p>
-              )}
-            </div>
+          <div className="ui-table-wrap">
+            <table className="ui-table">
+              <thead>
+                <tr>
+                  <th scope="col">Node</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Battery</th>
+                  <th scope="col">Recent events</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((node) => (
+                  <tr key={node.node_id}>
+                    <td>{node.node_name}</td>
+                    <td>{node.status || "Unknown"}</td>
+                    <td>
+                      {node.battery_level == null
+                        ? "Unavailable"
+                        : `${node.battery_level}%`}
+                    </td>
+                    <td>
+                      {
+                        data.detections.filter(
+                          (event) => event.node_name === node.node_name,
+                        ).length
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!nodes.length && (
+              <p className="p-6 ui-muted">
+                {data.nodes.length
+                  ? "No nodes match your search."
+                  : "No sensor nodes are registered for this plot."}
+              </p>
+            )}
           </div>
-          {/* Harvest Analytics Chart */}
-          <div className="mt-6">
+          <p className="ui-muted">
+            {mode === "simulation"
+              ? "Sample readings only. These nodes and events are not connected to real hardware."
+              : "Recent events refer to the latest ten records returned by the API. Orchard area and harvest weight are unavailable."}
+          </p>
+        </>
+      )}
+      {mode === "simulation" && (
+        <>
+          <section className="ui-panel dashboard-recent">
+            <h2>Recent detections · simulation</h2>
+            <div className="ui-table-wrap">
+              <table className="ui-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Time (MYT)</th>
+                    <th scope="col">Node</th>
+                    <th scope="col">Detection</th>
+                    <th scope="col">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demoDetections.map((event) => (
+                    <tr key={event.id}>
+                      <td>
+                        {new Date(event.time).toLocaleString("en-MY", {
+                          timeZone: "Asia/Kuala_Lumpur",
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </td>
+                      <td>{event.node}</td>
+                      <td>
+                        {event.prediction ||
+                          (event.status === "FAILED"
+                            ? "Unknown · camera timeout"
+                            : "Awaiting verification")}
+                      </td>
+                      <td>
+                        <Link
+                          className="ui-text-link"
+                          to={`/map/events/${event.id}`}
+                        >
+                          Review {event.id}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <div className="dashboard-chart">
             <HarvestChart />
           </div>
-        </div>
-      </div>
+        </>
+      )}
+      <Link className="ui-text-link" to="/analytics">
+        View Harvest Logs (simulated events)
+      </Link>
     </div>
   );
 }

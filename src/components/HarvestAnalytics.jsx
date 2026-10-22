@@ -1,133 +1,167 @@
-import React, { useState } from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import HarvestChart from './HarvestChart';
+import { useState } from "react";
+import { demoDetections } from "../data/demoDetections";
+import "./Detections.css";
 
-// Mock dataset tracking fruit drop validations within the 2m² patch
-const HARVEST_LOGS = [
-  { id: 'TRK-901', timestamp: '2026-06-17 08:32', node: 'NODE-03', status: 'Correct Fall', weight: '1.8kg' },
-  { id: 'TRK-902', timestamp: '2026-06-17 11:15', node: 'NODE-03', status: 'Correct Fall', weight: '2.1kg' },
-  { id: 'TRK-903', timestamp: '2026-06-16 14:02', node: 'NODE-01', status: 'Correct Fall', weight: '1.5kg' },
-  { id: 'TRK-904', timestamp: '2026-06-15 03:40', node: 'NODE-02', status: 'False Alarm: Animal', weight: '0.0kg' },
-  { id: 'TRK-905', timestamp: '2026-06-14 19:11', node: 'NODE-01', status: 'Correct Fall', weight: '2.4kg' },
-];
+const timeZone = "Asia/Kuala_Lumpur";
+const detectionType = (event) => {
+  if (event.prediction === "Durian") return "Durian";
+  if (event.prediction === "Not durian") return "Non-durian";
+  return event.status === "FAILED" ? "Unknown" : "Awaiting verification";
+};
+const eventDate = (value) =>
+  new Date(value).toLocaleDateString("en-MY", {
+    timeZone,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+const eventTime = (value) =>
+  new Date(value).toLocaleTimeString("en-MY", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 
 export default function HarvestAnalytics() {
-  const [logs] = useState(HARVEST_LOGS);
-
-  // 1. EXPORT TO SPREADSHEET FUNCTION (CSV)
-  const exportToCSV = () => {
-    const headers = ['Record ID,Timestamp,Sensor Node,Classification,Estimated Weight\n'];
-    const rows = logs.map(log => 
-      `${log.id},${log.timestamp},${log.node},${log.status},${log.weight}`
-    );
-    
-    const csvContent = "data:text/csv;charset=utf-8," + headers.concat(rows).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `DuriAI_Harvest_Report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // 2. EXPORT TO DOCUMENT FUNCTION (PDF)
-  const exportToPDF = () => {
-    const doc = new jsPDF();
-    
-    // Document Branding Headers
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text("DURI.AI HARVEST INTELLIGENCE REPORT", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 27);
-    doc.text("Target Grid Center: 2.931086, 101.798198 (2m² Plot Area)", 14, 32);
-    
-    // Mapping logs into data table format
-    const tableBody = logs.map(log => [log.id, log.timestamp, log.node, log.status, log.weight]);
-    
-    // Execute autoTable as an explicit function pass
-    autoTable(doc, {
-      startY: 40,
-      head: [['Record ID', 'Timestamp', 'Sensor Node', 'Classification', 'Est. Weight']],
-      body: tableBody,
-      headStyles: { fillColor: [6, 95, 70] }, // Dark Emerald matching farm brand
-      theme: 'striped'
-    });
-
-    doc.save(`DuriAI_Harvest_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-  };
-
+  const [type, setType] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  // Logs depend on event fixtures only. Unavailable/corrupt feedback storage
+  // must never prevent read-only event history from rendering.
+  const events = demoDetections.filter(
+    (event) => !type || detectionType(event) === type,
+  );
+  const rows = events.map((event) => [
+    eventDate(event.time),
+    eventTime(event.time),
+    detectionType(event),
+    event.node,
+  ]);
+  const headers = ["Date", "Time (MYT)", "Detection type", "Node"];
+  async function exportLogs(format) {
+    setExporting(true);
+    setError("");
+    try {
+      if (format === "pdf") {
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+          import("jspdf"),
+          import("jspdf-autotable"),
+        ]);
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("Duri.AI - SIMULATED harvest logs", 14, 18);
+        doc.setFontSize(10);
+        doc.text(
+          "Sample events only. All times are Malaysia time (MYT).",
+          14,
+          26,
+        );
+        autoTable(doc, { startY: 33, head: [headers], body: rows });
+        doc.save("DuriAI_Simulation_Logs.pdf");
+      } else {
+        const content = [headers, ...rows]
+          .map((row) =>
+            row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","),
+          )
+          .join("\r\n");
+        const url = URL.createObjectURL(
+          new Blob([content], { type: "text/csv;charset=utf-8" }),
+        );
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "DuriAI_Simulation_Logs.csv";
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch {
+      setError(
+        "The export could not be created. Please try again. The logs are still available below.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="shadow-lg justify-center tracking-wider border border-green-500 rounded-lg p-1 bg-gradient-to-r from-green-800 to-green-500 text-3xl font-black text-white">
-            Harvest Analytics & Logs
-          </h1>
-          <p className="text-slate-900 text-sm mt-1">
-            Audit historical drops, export sensor data, and analyze classification states.
-          </p>
-        </div>
-        
-        {/* EXPORT ACTION UTILITIES */}
-        <div className="flex gap-2">
-          <button 
-            onClick={exportToCSV}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md cursor-pointer"
-          >
-            📥 Export CSV Spreadsheet
-          </button>
-          <button 
-            onClick={exportToPDF}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-md cursor-pointer"
-          >
-            📄 Generate PDF Summary
-          </button>
-        </div>
+    <section className="detections ui-page">
+      <header>
+        <h1>Harvest Logs</h1>
+        <p className="mt-2 text-sm ui-muted">
+          Detection records by date, time, detection type, and sensor node.
+        </p>
       </header>
-
-      {/* HISTORICAL LOG TRACKING TABLE */}
-      <div className="bg-gradient-to-br from-green-900 to-green-950 border border-slate-700/60 rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm text-slate-300">
-            <thead className="bg-gradient-to-r from-green-800 to-green-900 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-700/50">
-              <tr>
-                <th className="p-4">Record ID</th>
-                <th className="p-4">Timestamp</th>
-                <th className="p-4">Sensor Node</th>
-                <th className="p-4">AI / User Classification</th>
-                <th className="p-4 text-right">Est. Weight</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/40">
-              {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-700/30 transition">
-                  <td className="p-4 font-mono text-emerald-400 font-bold">{log.id}</td>
-                  <td className="p-4 text-slate-400">{log.timestamp}</td>
-                  <td className="p-4 font-semibold">{log.node}</td>
-                  <td className="p-4">
-                    <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
-                      log.status.includes('Correct') 
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}>
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right font-medium text-white">{log.weight}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="p-4">
-          <HarvestChart data={logs} />
+      <div className="d-demo">
+        <div>
+          <strong>Simulation mode</strong>
+          <span>
+            Sample events only · no live hardware connected · all times in
+            Malaysia time (MYT)
+          </span>
         </div>
       </div>
-    </div>
+      <div className="d-filters log-toolbar">
+        <label>
+          Detection type
+          <select
+            value={type}
+            onChange={(event) => setType(event.target.value)}
+          >
+            <option value="">All types</option>
+            {[...new Set(demoDetections.map(detectionType))].map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          disabled={exporting || !events.length}
+          onClick={() => exportLogs("csv")}
+        >
+          Export CSV
+        </button>
+        <button
+          disabled={exporting || !events.length}
+          onClick={() => exportLogs("pdf")}
+        >
+          {exporting ? "Preparing export…" : "Export PDF"}
+        </button>
+      </div>
+      {error && (
+        <p className="d-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="ui-table-wrap">
+        <table className="ui-table">
+          <caption className="sr-only">
+            Simulated harvest logs. Dates and times use Malaysia time.
+          </caption>
+          <thead>
+            <tr>
+              {["Date", "Time (MYT)", "Detection type", "Node"].map((title) => (
+                <th scope="col" key={title}>
+                  {title}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {events.map((event, index) => (
+              <tr key={event.id}>
+                {rows[index].map((value, column) => (
+                  <td key={column}>{value}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!events.length && (
+          <p className="p-6 text-center" role="status">
+            No detections match this type.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
