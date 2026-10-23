@@ -14,11 +14,13 @@ import {
 } from "react-router-dom";
 import AuthScreen from "./components/AuthScreen";
 import DetectionProvider from "./components/DetectionProvider";
+import FarmProvider from "./components/FarmProvider";
+import FarmManagement from "./components/FarmManagement";
+import SimulationEventDetails from "./components/SimulationEventDetails";
 import AppLayout from "./components/AppLayout";
 import DashboardHome from "./components/DashboardHome";
 import OrchardMap from "./components/OrchardMap";
 import HarvestAnalytics from "./components/HarvestAnalytics";
-import NodeManagement from "./components/NodeManagement";
 import Settings from "./components/Settings";
 import TrainingHistory from "./components/TrainingHistory"; // === NEW ADDITION ===
 
@@ -65,7 +67,9 @@ function ProtectedApp() {
       key={String(farmer.farmer_id)}
       farmerId={farmer.farmer_id}
     >
-      <AppLayout />
+      <FarmProvider farmerId={String(farmer.farmer_id)}>
+        <AppLayout />
+      </FarmProvider>
     </DetectionProvider>
   ) : (
     <Navigate to={signedOut ? "/" : "/login"} replace />
@@ -95,16 +99,25 @@ function App() {
             />
             <Route path="/map" element={<OrchardMap />} />
             <Route path="/map/events/:eventId" element={<OrchardMap />} />
+            <Route
+              path="/map/simulation/events/:eventId"
+              element={<SimulationEventDetails />}
+            />
             <Route path="/analytics" element={<HarvestAnalytics />} />
             <Route
               path="/analytics/events/:eventId"
               element={<LegacyDetectionRedirect />}
             />
-            
+
             {/* === THE MISSING ROUTE YOU NEEDED === */}
             <Route path="/training" element={<TrainingHistory />} />
-            
-            <Route path="/nodes" element={<NodeManagement />} />
+
+            <Route path="/plots" element={<FarmManagement page="plots" />} />
+            <Route path="/nodes" element={<FarmManagement page="nodes" />} />
+            <Route
+              path="/notifications"
+              element={<FarmManagement page="notifications" />}
+            />
             <Route path="/settings" element={<Settings />} />
             <Route
               path="*"

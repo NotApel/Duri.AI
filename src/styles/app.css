@@ -389,6 +389,27 @@ h3 {
     border-top: 2px solid var(--ui-green);
     padding-top: 4px;
   }
+  .app-nav-more { flex: 1; min-width: 0; }
+  .app-nav-more > summary { cursor: pointer; list-style: none; }
+  .app-nav-more > summary::-webkit-details-marker { display: none; }
+  .app-more-menu {
+    position: absolute;
+    bottom: 100%;
+    right: 8px;
+    min-width: 200px;
+    padding: 8px;
+    display: grid;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+  }
+  .app-more-menu .app-nav-link {
+    flex-direction: row;
+    justify-content: start;
+    gap: 12px;
+    padding: 12px;
+    font-size: 14px;
+    min-height: 44px;
+  }
   .ui-panel {
     padding: 20px;
   }

@@ -93,3 +93,15 @@ The feature list above describes project goals. Hardware inference, retraining,
 OTA, push notifications and offline PWA operation are not verified by this
 frontend integration. Illustrative map geometry and Dashboard demonstration data
 remain labelled separately from API records.
+
+## Farm plots, nodes and notifications
+
+The frontend management screens support plot creation/editing/selection, node
+registration/assignment, and notification read states with event links. Their
+default **Browser simulation** stores account-scoped records locally, separately
+from backend detections and Harvest Logs. Choose **Backend records** to use the
+available APIs; missing write endpoints report an error without claiming a save.
+
+See the [backend setup and endpoint guide](docs/farm-management-backend-setup.md)
+for VS Code/PostgreSQL configuration, required routes, payloads and ownership rules.
+This feature does not modify backend code or implement real push/device updates.

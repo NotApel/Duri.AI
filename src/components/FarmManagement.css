@@ -1,0 +1,123 @@
+.farm-management {
+  min-width: 0;
+}
+.farm-management .ui-page-header {
+  align-items: start;
+}
+.farm-management .ui-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.farm-management .ui-table {
+  min-width: 720px;
+}
+.farm-management .ui-table th {
+  white-space: nowrap;
+}
+.farm-source {
+  display: grid;
+  gap: 12px;
+}
+.farm-source > .ui-field {
+  max-width: 420px;
+}
+.farm-source > button {
+  justify-self: start;
+}
+.farm-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 24px;
+  align-items: start;
+}
+.farm-grid > *,
+.farm-editor,
+.farm-editor fieldset {
+  min-width: 0;
+}
+.farm-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+.farm-coordinate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.farm-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.farm-toolbar > label {
+  flex: 1;
+  min-width: min(240px, 100%);
+}
+.farm-record-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+.farm-record-list > li {
+  padding-block: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+.farm-record-list p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.farm-management .ui-text-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-align: left;
+}
+.farm-management [aria-pressed="true"] {
+  font-weight: 700;
+}
+.farm-facts {
+  margin-block: 16px;
+}
+.farm-facts > div {
+  padding-block: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.farm-facts dt {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.farm-facts dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+.farm-empty {
+  padding: 20px;
+}
+.farm-management p,
+.farm-management dd,
+.farm-management button {
+  overflow-wrap: anywhere;
+}
+.farm-management .ui-panel > .ui-actions {
+  margin-top: 16px;
+}
+.farm-management button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+@media (max-width: 1050px) {
+  .farm-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .farm-coordinate-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
