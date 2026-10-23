@@ -6,5 +6,5 @@ feedback_images/
 simulate_feedback.py
 test_monkey.png
 dist/
-build/
+docs/
 *.log
