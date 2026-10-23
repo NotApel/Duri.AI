@@ -199,6 +199,11 @@ app.get(["/api/farmer", "/api/farmers"], auth ,async (req, res) => {
 app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (parseInt(id) !== req.farmer.id) {
+  return res.status(403).json({ error: "Access denied. You can only view your own data." });
+}
+
     const result = await pool.query(
       "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer WHERE farmer_id = $1",
       [id]
@@ -221,6 +226,11 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
 app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
+
+    if (parseInt(farmerId) !== req.farmer.id) {
+  return res.status(403).json({ error: "Access denied." });
+}
+
     const result = await pool.query(
       "SELECT * FROM farm_plot WHERE farmer_id = $1 ORDER BY plot_name",
       [farmerId]
@@ -236,6 +246,11 @@ app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], aut
 app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
+
+    if (parseInt(farmerId) !== req.farmer.id) {
+    return res.status(403).json({ error: "Access denied." });
+}
+
     const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
 
     if (!farm_name || !plot_name || latitude === undefined || longitude === undefined) {
