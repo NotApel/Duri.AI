@@ -1,5 +1,5 @@
-const jwt = require("jsonwebtoken");
 const { createHash } = require("node:crypto");
+const jwt = require("jsonwebtoken");
 
 module.exports = function createAuthMiddleware(
   pool,
@@ -48,4 +48,3 @@ module.exports = function createAuthMiddleware(
     }
   };
 };
-

@@ -1,13 +1,9 @@
-import { useState } from "react";
-import { demoDetections } from "../data/demoDetections";
+import { useEffect, useState } from "react";
+import { fetchAlerts } from "../services/api";
+import { detectionType } from "../services/detectionData";
 import "./Detections.css";
 
 const timeZone = "Asia/Kuala_Lumpur";
-const detectionType = (event) => {
-  if (event.prediction === "Durian") return "Durian";
-  if (event.prediction === "Not durian") return "Non-durian";
-  return event.status === "FAILED" ? "Unknown" : "Awaiting verification";
-};
 const eventDate = (value) =>
   new Date(value).toLocaleDateString("en-MY", {
     timeZone,
@@ -27,9 +23,26 @@ export default function HarvestAnalytics() {
   const [type, setType] = useState("");
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
-  // Logs depend on event fixtures only. Unavailable/corrupt feedback storage
-  // must never prevent read-only event history from rendering.
-  const events = demoDetections.filter(
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAlerts({ signal: controller.signal })
+      .then((data) => {
+        setRecords(data);
+        setLoadError("");
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") setLoadError(err.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [attempt]);
+  const events = records.filter(
     (event) => !type || detectionType(event) === type,
   );
   const rows = events.map((event) => [
@@ -50,19 +63,20 @@ export default function HarvestAnalytics() {
         ]);
         const doc = new jsPDF();
         doc.setFontSize(16);
-        doc.text("Duri.AI - SIMULATED harvest logs", 14, 18);
+        doc.text("Duri.AI - harvest logs", 14, 18);
         doc.setFontSize(10);
-        doc.text(
-          "Sample events only. All times are Malaysia time (MYT).",
-          14,
-          26,
-        );
+        doc.text("Backend records. All times are Malaysia time (MYT).", 14, 26);
         autoTable(doc, { startY: 33, head: [headers], body: rows });
-        doc.save("DuriAI_Simulation_Logs.pdf");
+        doc.save("DuriAI_Harvest_Logs.pdf");
       } else {
         const content = [headers, ...rows]
           .map((row) =>
-            row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","),
+            row
+              .map((value) => {
+                const safe = /^[=+@\-\t\r]/.test(value) ? "'" + value : value;
+                return `"${safe.replaceAll('"', '""')}"`;
+              })
+              .join(","),
           )
           .join("\r\n");
         const url = URL.createObjectURL(
@@ -70,7 +84,7 @@ export default function HarvestAnalytics() {
         );
         const link = document.createElement("a");
         link.href = url;
-        link.download = "DuriAI_Simulation_Logs.csv";
+        link.download = "DuriAI_Harvest_Logs.csv";
         document.body.append(link);
         link.click();
         link.remove();
@@ -94,10 +108,10 @@ export default function HarvestAnalytics() {
       </header>
       <div className="d-demo">
         <div>
-          <strong>Simulation mode</strong>
+          <strong>Backend records</strong>
           <span>
-            Sample events only · no live hardware connected · all times in
-            Malaysia time (MYT)
+            Same detection source as Orchard Map · all times in Malaysia time
+            (MYT)
           </span>
         </div>
       </div>
@@ -109,19 +123,23 @@ export default function HarvestAnalytics() {
             onChange={(event) => setType(event.target.value)}
           >
             <option value="">All types</option>
-            {[...new Set(demoDetections.map(detectionType))].map((value) => (
+            {[...new Set(records.map(detectionType))].map((value) => (
               <option key={value}>{value}</option>
             ))}
           </select>
         </label>
         <button
-          disabled={exporting || !events.length}
+          disabled={
+            loading || Boolean(loadError) || exporting || !events.length
+          }
           onClick={() => exportLogs("csv")}
         >
           Export CSV
         </button>
         <button
-          disabled={exporting || !events.length}
+          disabled={
+            loading || Boolean(loadError) || exporting || !events.length
+          }
           onClick={() => exportLogs("pdf")}
         >
           {exporting ? "Preparing export…" : "Export PDF"}
@@ -132,10 +150,29 @@ export default function HarvestAnalytics() {
           {error}
         </p>
       )}
+      {loading && (
+        <p className="ui-notice" role="status">
+          Loading harvest logs…
+        </p>
+      )}
+      {loadError && (
+        <div className="ui-notice ui-error" role="alert">
+          {loadError}{" "}
+          <button
+            className="ui-button"
+            onClick={() => {
+              setLoading(true);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
       <div className="ui-table-wrap">
         <table className="ui-table">
           <caption className="sr-only">
-            Simulated harvest logs. Dates and times use Malaysia time.
+            Backend harvest logs. Dates and times use Malaysia time.
           </caption>
           <thead>
             <tr>
@@ -156,7 +193,7 @@ export default function HarvestAnalytics() {
             ))}
           </tbody>
         </table>
-        {!events.length && (
+        {!loading && !loadError && !events.length && (
           <p className="p-6 text-center" role="status">
             No detections match this type.
           </p>

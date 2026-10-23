@@ -419,3 +419,17 @@
 .d-page-title[tabindex="-1"]:focus {
   outline: none;
 }
+
+/* Keep native upload inputs and fieldsets inside narrow grid tracks. */
+.detections,
+.d-detail-grid > *,
+.d-feedback fieldset {
+  min-width: 0;
+}
+.d-demo > div,
+.d-camera > *,
+.d-measurements > div {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
