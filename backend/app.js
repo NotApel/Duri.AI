@@ -60,10 +60,12 @@ app.get("/api/health", async (req, res) => {
 // ============================================================
 
 // Get all farmers (supports /api/farmer and /api/farmers)
-app.get(["/api/farmer", "/api/farmers"], auth ,async (req, res) => {
+app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
   try {
+    // Ambil data sendiri sahaja
     const result = await pool.query(
-      "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer ORDER BY created_at DESC"
+      "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer WHERE farmer_id = $1",
+      [req.farmer.id]
     );
     res.json(result.rows);
   } catch (error) {
@@ -157,6 +159,22 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
 app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth, async (req, res) => {
   try {
     const { plotId } = req.params;
+
+    // 1. Check sama ada plot ni milik farmer yang login
+    const plotCheck = await pool.query(
+      "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
+      [plotId]
+    );
+
+    if (plotCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Plot not found" });
+    }
+
+    if (plotCheck.rows[0].farmer_id !== req.farmer.id) {
+      return res.status(403).json({ error: "Access denied. You can only view nodes from your own plots." });
+    }
+
+    // 2. Ambil nodes
     const result = await pool.query(
       "SELECT * FROM sensor_node WHERE plot_id = $1 ORDER BY node_name",
       [plotId]
