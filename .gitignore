@@ -1,32 +1,10 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# environment variable
-backend/.env
-
+node_modules/
 .env
-.env.*
-!.env.example
-backend/.env
+data.sql
+run_sql.js
+feedback_images/
+simulate_feedback.py
+test_monkey.png
+dist/
+docs/
+*.log

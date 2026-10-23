@@ -2,6 +2,7 @@
 export const API_URL = (
   import.meta.env?.VITE_API_URL || `http://${window.location.hostname}:3000/api`
 ).replace(/\/$/, "");
+
 function readToken() {
   try {
     return localStorage.getItem("token");
@@ -11,10 +12,12 @@ function readToken() {
     );
   }
 }
+
 function clearCredentials() {
   localStorage.removeItem("token");
   localStorage.removeItem("farmer");
 }
+
 export async function apiRequest(path, options = {}) {
   const publicAuth = [
     "/auth/login",
@@ -22,9 +25,12 @@ export async function apiRequest(path, options = {}) {
     "/auth/forgot-password",
     "/auth/reset-password",
   ].includes(path);
+  
   const headers = new Headers(options.headers);
   const token = publicAuth ? null : readToken();
+  
   if (token) headers.set("Authorization", `Bearer ${token}`);
+  
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -40,6 +46,7 @@ export async function apiRequest(path, options = {}) {
       { cause: error },
     );
   }
+
   const body =
     response.status === 204
       ? null
@@ -48,6 +55,7 @@ export async function apiRequest(path, options = {}) {
             throw new Error("The server returned an invalid response.");
           return {};
         });
+          
   if (!response.ok) {
     if (
       response.status === 401 &&
@@ -68,15 +76,21 @@ export async function apiRequest(path, options = {}) {
   }
   return body;
 }
+
 const post = (path, body) =>
   apiRequest(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+// ==========================================
+// AUTHENTICATION FUNCTIONS
+// ==========================================
 export const fetchAlerts = () => apiRequest("/detections");
 export const fetchStats = () => apiRequest("/analytics/stats");
 export const fetchHealth = () => apiRequest("/health");
+
 export async function loginFarmer(username, password) {
   const response = await post("/auth/login", { username, password });
   if (
@@ -102,7 +116,9 @@ export async function loginFarmer(username, password) {
   }
   return response;
 }
+
 export const registerFarmer = (farmer) => post("/auth/register", farmer);
+
 export async function getSession() {
   if (!readToken()) return { farmer: null };
   const response = await apiRequest("/auth/session");
@@ -112,6 +128,7 @@ export async function getSession() {
     );
   return response;
 }
+
 export async function logoutFarmer() {
   if (readToken()) {
     try {
@@ -122,3 +139,23 @@ export async function logoutFarmer() {
   }
   clearCredentials();
 }
+
+// ==========================================
+// AI TRAINING FUNCTIONS (Damia's Code)
+// ==========================================
+export const fetchTraining = () => apiRequest("/analytics/training");
+export const retrain = () => apiRequest("/analytics/retrain", { method: "POST" });
+
+export const getCurrentFarmer = async () => {
+  try {
+    const session = await apiRequest("/auth/session");
+    return { farmer_id: session.farmer_id || session.farmer?.farmer_id };
+  } catch (err) {
+    console.error("Failed to get current farmer:", err);
+    return { farmer_id: null };
+  }
+};
+
+export const clearFarmer = () => {
+  clearCredentials();
+};

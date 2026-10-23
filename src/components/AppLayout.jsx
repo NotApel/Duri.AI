@@ -9,7 +9,9 @@ import {
   Settings,
   LogOut,
   TreeDeciduous,
+  Brain, // === NEW ADDITION ===
 } from "lucide-react";
+
 const navigation = [
   {
     path: "/dashboard",
@@ -24,15 +26,19 @@ const navigation = [
     mobile: "Logs",
     icon: ClipboardList,
   },
+  // === NEW ADDITION ===
+  { path: "/training", label: "AI Training", mobile: "AI", icon: Brain },
   { path: "/nodes", label: "Node Status", mobile: "Nodes", icon: Hexagon },
   { path: "/settings", label: "Settings", mobile: "Settings", icon: Settings },
 ];
+
 export default function AppLayout() {
   const navigate = useNavigate();
   const { logout, sessionError, refresh } = useContext(AuthContext);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const logoutPending = useRef(false);
+
   async function handleLogout() {
     if (logoutPending.current || !window.confirm("Log out of Duri.AI?")) return;
     logoutPending.current = true;
@@ -48,6 +54,7 @@ export default function AppLayout() {
       setLoggingOut(false);
     }
   }
+
   const links = (mobile = false) =>
     navigation.map(({ path, label, mobile: shortLabel, icon: Icon }) => (
       <NavLink
@@ -59,6 +66,7 @@ export default function AppLayout() {
         <span>{mobile ? shortLabel : label}</span>
       </NavLink>
     ));
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -94,8 +102,9 @@ export default function AppLayout() {
       </header>
       <main id="main-content" className="app-main">
         <p className="ui-notice app-preview">
-          Development preview. Map positions, detections, and node updates are
-          simulated; hardware and retraining are not connected.
+          Development preview. Map positions and node updates are simulated.
+          Detection and training screens use backend records; hardware and model
+          evaluation remain unverified.
         </p>
         {sessionError && (
           <p className="ui-notice ui-error mb-4" role="alert">

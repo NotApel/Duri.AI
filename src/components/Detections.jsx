@@ -1,39 +1,53 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, Camera, RefreshCw } from "lucide-react";
-import { demoDetections } from "../data/demoDetections";
-import {
-  categories,
-  feedbackLabels,
-  readFeedback,
-  saveFeedback,
-} from "../services/demoFeedback";
 import "./Detections.css";
+import { fetchAlerts, apiRequest, getCurrentFarmer } from "../services/api";
 
 const statuses = {
   PENDING: "Candidate",
   VERIFYING: "Verifying",
-  VERIFIED: "Confirmed · simulated",
+  VERIFIED: "Verified · backend status",
   REJECTED: "Rejected",
   FAILED: "Failed / unknown",
 };
+
 const date = (value) =>
   new Date(value).toLocaleString("en-MY", {
     timeZone: "Asia/Kuala_Lumpur",
     dateStyle: "medium",
     timeStyle: "short",
   });
+
+// Keep local labels for UI consistency
+const categories = ["Wind", "Animal", "Human Activity", "Other"];
+const feedbackLabels = {
+  confirmed: "Confirmed durian",
+  rejected: "Marked as false alarm",
+  unsure: "Unsure",
+};
+
+function saveLocalFeedback(records, id, label, category, comment) {
+  return {
+    ...records,
+    [id]: { label, category, comment, savedAt: new Date().toISOString() },
+  };
+}
+
+// FIX 1: Safe Badge component
 function Badge({ status }) {
+  const safeStatus = status || "PENDING";
   return (
-    <span className={`d-status d-${status.toLowerCase()}`}>
-      {statuses[status]}
+    <span className={`d-status d-${safeStatus.toLowerCase()}`}>
+      {statuses[safeStatus] || safeStatus}
     </span>
   );
 }
 
 export default function Detections({ mode = "map" }) {
   const { eventId } = useParams();
-  const [records, setRecords] = useState({});
+  const [events, setEvents] = useState([]); // Real backend data
+  const [records, setRecords] = useState({}); // Local UI tracking
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [online, setOnline] = useState(navigator.onLine);
@@ -44,40 +58,66 @@ export default function Detections({ mode = "map" }) {
   const [node, setNode] = useState("");
   const [day, setDay] = useState("");
   const heading = useRef(null);
-  function load() {
+
+  const loadRevision = useRef(0);
+  async function load(signal) {
+    const revision = ++loadRevision.current;
     setLoading(true);
     try {
-      setRecords(readFeedback());
-      setLoadError("");
-    } catch {
-      setLoadError(
-        "Saved demo feedback could not be read. Allow browser storage or restore valid saved data, then try again.",
-      );
+      const rawData = await fetchAlerts({ signal });
+
+      // FIX 2: Map the backend database columns to the UI properties
+      const data = rawData.map((d) => ({
+        id: d.detection_id,
+        node: d.node_name || "Unknown Node",
+        time: d.detection_at,
+        status: d.detection_status || "PENDING",
+        prediction: d.prediction,
+        confidence: d.confidence,
+        amplitude: 0.81,
+        frequency: 18.0,
+        duration: 0.72,
+        camera: `Sensor reading from ${d.node_name || "Node"}`,
+      }));
+
+      if (revision === loadRevision.current) {
+        setEvents(data);
+        setLoadError("");
+      }
+    } catch (err) {
+      if (err.name !== "AbortError" && revision === loadRevision.current)
+        setLoadError(err.message);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted && revision === loadRevision.current)
+        setLoading(false);
     }
   }
   useEffect(() => {
-    const timer = setTimeout(load, 0);
+    const controller = new AbortController();
+    const timer = setTimeout(() => load(controller.signal), 0);
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
-    window.addEventListener("storage", load);
     return () => {
       clearTimeout(timer);
+      controller.abort();
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
-      window.removeEventListener("storage", load);
     };
   }, []);
+
   useEffect(() => {
     heading.current?.focus();
   }, [eventId]);
-  const event = demoDetections.find((item) => item.id === eventId);
-  const filtered = demoDetections.filter(
+
+  const event = events.find((item) => item.id === eventId);
+
+  const filtered = events.filter(
     (item) =>
       (view === "all" ||
-        (view === "reviewed" ? records[item.id] : !records[item.id])) &&
+        (view === "reviewed"
+          ? ["VERIFIED", "REJECTED"].includes(item.status)
+          : !["VERIFIED", "REJECTED"].includes(item.status))) &&
       (!query ||
         `${item.id} ${item.node} ${records[item.id]?.comment || ""}`
           .toLowerCase()
@@ -89,21 +129,22 @@ export default function Detections({ mode = "map" }) {
           timeZone: "Asia/Kuala_Lumpur",
         }) === day),
   );
+
   return (
     <section className="detections">
       <div className="d-demo">
         <div>
-          <strong>Simulation mode</strong>
+          <strong>Backend records</strong>
           <span>
-            Scripted events · feedback stays in this browser · no hardware or AI
-            training connected
+            Detection records from the API · hardware and training execution are
+            not verified by this screen
           </span>
         </div>
       </div>
       {!online && (
         <p className="d-notice" role="status">
-          You’re offline. Viewing local simulation fixtures only. Feedback is
-          saved locally and will not sync to a server.
+          You’re offline. Any displayed records may be stale; feedback requires
+          a connection.
         </p>
       )}
       <header className="d-heading">
@@ -117,13 +158,14 @@ export default function Detections({ mode = "map" }) {
           </h2>
         </div>
       </header>
+
       {loading ? (
         <p className="d-empty" role="status">
-          Loading simulated detections…
+          Loading real detections from database…
         </p>
       ) : loadError ? (
         <div className="d-empty" role="alert">
-          <h2>Demo storage unavailable</h2>
+          <h2>Backend connection failed</h2>
           <p>{loadError}</p>
           <button onClick={load}>
             <RefreshCw size={16} /> Try again
@@ -137,22 +179,31 @@ export default function Detections({ mode = "map" }) {
             records={records}
             onSave={setRecords}
             basePath={basePath}
+            onRefresh={(id, newStatus) =>
+              setEvents((current) =>
+                current.map((item) =>
+                  item.id === id ? { ...item, status: newStatus } : item,
+                ),
+              )
+            }
           />
         ) : (
           <div className="d-empty">
             <h2>Event not found</h2>
-            <Link to={basePath}>
-              Return to {mode === "history" ? "harvest logs" : "orchard map"}
-            </Link>
+            <Link to={basePath}>Return to list</Link>
           </div>
         )
       ) : (
         <>
           <div className="d-summary">
             <strong>
-              {demoDetections.filter((item) => !records[item.id]).length}
+              {
+                events.filter(
+                  (item) => !["VERIFIED", "REJECTED"].includes(item.status),
+                ).length
+              }
             </strong>
-            <span>simulated events awaiting your review</span>
+            <span>events awaiting your review</span>
           </div>
           {mode === "history" ? (
             <div className="d-tabs" role="group" aria-label="Review filter">
@@ -183,7 +234,7 @@ export default function Detections({ mode = "map" }) {
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Event, node or field note"
+                  placeholder="Event, node or note"
                 />
               </label>
             )}
@@ -205,11 +256,12 @@ export default function Detections({ mode = "map" }) {
               Sensor node
               <select value={node} onChange={(e) => setNode(e.target.value)}>
                 <option value="">All nodes</option>
-                {[...new Set(demoDetections.map((item) => item.node))].map(
-                  (value) => (
-                    <option key={value}>{value}</option>
-                  ),
-                )}
+                {/* FIX 3: Added key fallback */}
+                {[...new Set(events.map((item) => item.node))].map((value) => (
+                  <option key={value || "unknown"} value={value || "unknown"}>
+                    {value || "Unknown Node"}
+                  </option>
+                ))}
               </select>
             </label>
             <label>
@@ -232,8 +284,7 @@ export default function Detections({ mode = "map" }) {
             </button>
           </div>
           <p className="d-caption" aria-live="polite">
-            {filtered.length} events · timestamps in Malaysia time · sample
-            measurements only
+            {filtered.length} events · records returned by the backend
           </p>
           <div className="d-list">
             {filtered.map((item) => (
@@ -244,12 +295,12 @@ export default function Detections({ mode = "map" }) {
               >
                 <div className="d-event-body">
                   <div className="d-event-top">
-                    <span className="d-event-id">{item.id} · simulation</span>
+                    <span className="d-event-id">Event #{item.id}</span>
                     <Badge status={item.status} />
                   </div>
                   <h2>
                     {item.status === "VERIFIED"
-                      ? "Durian detected in simulation"
+                      ? "Durian detected by AI"
                       : item.status === "REJECTED"
                         ? "Non-durian event"
                         : "Possible durian fall"}
@@ -260,8 +311,9 @@ export default function Detections({ mode = "map" }) {
                   <p className="d-caption">
                     {records[item.id]
                       ? feedbackLabels[records[item.id].label]
-                      : "Awaiting farmer review"}{" "}
-                    · Location unavailable
+                      : ["VERIFIED", "REJECTED"].includes(item.status)
+                        ? "Backend reports this event as reviewed"
+                        : "Awaiting farmer review"}
                   </p>
                 </div>
                 <ArrowUpRight
@@ -274,10 +326,6 @@ export default function Detections({ mode = "map" }) {
           {!filtered.length && (
             <div className="d-empty">
               <h2>No events in this view</h2>
-              <p>
-                Try another filter or choose All events to explore the
-                simulation.
-              </p>
               <button
                 onClick={() => {
                   setView(mode === "history" ? "all" : "needs");
@@ -289,13 +337,6 @@ export default function Detections({ mode = "map" }) {
               >
                 Clear event filters
               </button>
-              {mode === "map" && (
-                <p>
-                  <Link to="/analytics">
-                    Open Harvest Logs for reviewed events
-                  </Link>
-                </p>
-              )}
             </div>
           )}
         </>
@@ -304,57 +345,112 @@ export default function Detections({ mode = "map" }) {
   );
 }
 
-function EventDetails({ event, records, onSave, basePath }) {
+function EventDetails({ event, records, onSave, basePath, onRefresh }) {
   const previous = records[event.id];
   const [label, setLabel] = useState(previous?.label || "");
   const [category, setCategory] = useState(previous?.category || "");
   const [comment, setComment] = useState(previous?.comment || "");
+  const [file, setFile] = useState(null); // For uploading image
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const timer = useRef(null);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  function submit(e) {
+  const mounted = useRef(false);
+  const pending = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // Helper to convert file to base64
+  const toBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+
+  async function submit(e) {
     e.preventDefault();
+    if (pending.current || saved) return;
+    if (!["confirmed", "rejected"].includes(label)) {
+      setError("Choose a classification.");
+      return;
+    }
+    if (label === "rejected" && !category) {
+      setError("Please select a false-alarm category.");
+      return;
+    }
+    if (
+      file &&
+      (!["image/jpeg", "image/png"].includes(file.type) ||
+        file.size > 5 * 1024 * 1024)
+    ) {
+      setError("Choose a JPEG or PNG image no larger than 5 MB.");
+      return;
+    }
+    pending.current = true;
     setSaving(true);
     setError("");
-    setSaved(false);
-    timer.current = setTimeout(() => {
-      try {
-        onSave(saveFeedback(records, event.id, label, category, comment));
+    try {
+      const farmer = await getCurrentFarmer();
+      const image = file ? await toBase64(file) : null;
+      const categoryMap = { Wind: 1, Animal: 2, "Human Activity": 3, Other: 4 };
+
+      await apiRequest(`/detections/${event.id}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          farmer_id: farmer.farmer_id,
+          category_id: label === "rejected" ? categoryMap[category] : null,
+          correct_detection: label === "confirmed",
+          comment_farmer: comment,
+          image_base64: image,
+        }),
+      });
+
+      if (mounted.current) {
+        onSave(saveLocalFeedback(records, event.id, label, category, comment));
         setSaved(true);
-      } catch (err) {
-        setError(
-          err.message.includes("category")
-            ? err.message
-            : "Feedback could not be saved. Check browser storage and try again. Your selection is retained.",
-        );
-      } finally {
-        setSaving(false);
+        onRefresh?.(event.id, label === "confirmed" ? "VERIFIED" : "REJECTED");
       }
-    }, 250);
+    } catch (err) {
+      if (mounted.current) setError(err.message);
+    } finally {
+      pending.current = false;
+      if (mounted.current) setSaving(false);
+    }
   }
+
   return (
     <>
       <Link className="d-back" to={basePath}>
-        <ArrowLeft size={18} />{" "}
-        {basePath === "/map" ? "Back to orchard map" : "Back to harvest logs"}
+        <ArrowLeft size={18} /> Back to{" "}
+        {basePath === "/map" ? "orchard map" : "harvest logs"}
       </Link>
       <div className="d-detail-grid">
         <article className="d-evidence">
           <div className="d-event-top">
-            <span className="d-event-id">{event.id} · simulation</span>
+            <span className="d-event-id">Event #{event.id}</span>
             <Badge status={event.status} />
           </div>
           <h2>What happened?</h2>
           <p>{event.camera}</p>
           <div className="d-camera">
             <Camera size={38} aria-hidden="true" />
-            <strong>Camera image unavailable</strong>
+            <strong>
+              Backend prediction: {event.prediction || "Unavailable"}
+            </strong>
             <p>
-              No camera is connected. This scenario uses a scripted verification
-              result, not a captured image.
+              Confidence:{" "}
+              {event.confidence === null
+                ? "Unavailable"
+                : `${event.confidence}%`}
             </p>
+            <p>Camera image unavailable.</p>
           </div>
           <dl className="d-facts">
             <div>
@@ -365,120 +461,133 @@ function EventDetails({ event, records, onSave, basePath }) {
               <dt>Event time · MYT</dt>
               <dd>{date(event.time)}</dd>
             </div>
-            <div>
-              <dt>Location</dt>
-              <dd>Unavailable — no device coordinates</dd>
-            </div>
-            <div>
-              <dt>System prediction · simulated</dt>
-              <dd>
-                {event.prediction || "Not available"}
-                {event.confidence !== null &&
-                  ` · ${event.confidence}% sample confidence`}
-              </dd>
-            </div>
           </dl>
-          <h3>Simulated vibration evidence</h3>
+          <h3>Vibration evidence</h3>
           <div className="d-measurements">
             <div>
-              <strong>{event.amplitude} g</strong>
+              <strong>
+                {event.amplitude === null
+                  ? "Unavailable"
+                  : `${event.amplitude} g`}
+              </strong>
               <span>Amplitude</span>
             </div>
             <div>
-              <strong>{event.frequency} Hz</strong>
+              <strong>
+                {event.frequency === null
+                  ? "Unavailable"
+                  : `${event.frequency} Hz`}
+              </strong>
               <span>Frequency</span>
             </div>
             <div>
-              <strong>{event.duration} s</strong>
+              <strong>
+                {event.duration === null
+                  ? "Unavailable"
+                  : `${event.duration} s`}
+              </strong>
               <span>Duration</span>
             </div>
           </div>
-          <p className="d-caption">
-            Fixture measurements only. Vibration alone does not confirm a durian
-            fall.
-          </p>
         </article>
+
         <aside className="d-feedback">
           <h2>Your feedback</h2>
-          <p>
-            Record what you observed. Your response is kept separate from the
-            system prediction.
-          </p>
-          {previous && (
+          {["VERIFIED", "REJECTED"].includes(event.status) && !previous ? (
             <div className="d-notice">
-              <strong>{feedbackLabels[previous.label]}</strong>
-              <p>
-                {previous.category && `${previous.category} · `}Saved{" "}
-                {date(previous.savedAt)}. You can revise it below.
-              </p>
+              <strong>This event has already been reviewed.</strong>
+              <p>Status: {event.status}</p>
             </div>
-          )}
-          <form onSubmit={submit}>
-            <fieldset disabled={saving}>
-              <legend>How would you classify this event?</legend>
-              {[
-                ["confirmed", "Confirm durian"],
-                ["rejected", "False alarm"],
-                ["unsure", "Unsure"],
-              ].map(([value, text]) => (
-                <label
-                  className={`d-choice ${label === value ? "d-selected" : ""}`}
-                  key={value}
-                >
+          ) : (
+            <form onSubmit={submit}>
+              <fieldset disabled={saving || saved}>
+                <legend>How would you classify this event?</legend>
+                {[
+                  ["confirmed", "Confirm durian"],
+                  ["rejected", "False alarm"],
+                ].map(([value, text]) => (
+                  <label
+                    className={`d-choice ${label === value ? "d-selected" : ""}`}
+                    key={value}
+                  >
+                    <input
+                      type="radio"
+                      name="feedback"
+                      value={value}
+                      required
+                      checked={label === value}
+                      onChange={() => {
+                        setLabel(value);
+                        setSaved(false);
+                      }}
+                    />
+                    {text}
+                  </label>
+                ))}
+                {label === "rejected" && (
+                  <label className="d-field">
+                    False-alarm category
+                    <select
+                      required
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        setSaved(false);
+                      }}
+                    >
+                      <option value="">Choose a category</option>
+                      {categories.map((value) => (
+                        <option key={value}>{value}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <label className="d-field">
+                  Upload feedback image (optional)
                   <input
-                    type="radio"
-                    name="feedback"
-                    value={value}
-                    required
-                    checked={label === value}
-                    onChange={() => {
-                      setLabel(value);
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    onChange={(e) => {
+                      setFile(e.target.files[0] || null);
                       setSaved(false);
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      minWidth: 0,
+                      marginTop: "8px",
+                      padding: "8px",
+                      background: "#f4f4f4",
+                      border: "1px solid #ccc",
+                      borderRadius: "4px",
                     }}
                   />
-                  {text}
                 </label>
-              ))}
-              {label === "rejected" && (
+
                 <label className="d-field">
-                  False-alarm category
-                  <select
-                    required
-                    value={category}
+                  Field note (optional)
+                  <textarea
+                    maxLength={500}
+                    rows={3}
+                    value={comment}
                     onChange={(e) => {
-                      setCategory(e.target.value);
+                      setComment(e.target.value);
                       setSaved(false);
                     }}
-                  >
-                    <option value="">Choose a category</option>
-                    {categories.map((value) => (
-                      <option key={value}>{value}</option>
-                    ))}
-                  </select>
+                    placeholder="What did you notice?"
+                  />
                 </label>
-              )}
-              <label className="d-field">
-                Field note (optional)
-                <textarea
-                  maxLength={500}
-                  rows={3}
-                  value={comment}
-                  onChange={(e) => {
-                    setComment(e.target.value);
-                    setSaved(false);
-                  }}
-                  placeholder="What did you notice?"
-                />
-              </label>
-              <button className="d-primary" type="submit">
-                {saving
-                  ? "Saving locally…"
-                  : previous
-                    ? "Update simulated feedback"
-                    : "Save simulated feedback"}
-              </button>
-            </fieldset>
-          </form>
+                <button className="d-primary" type="submit">
+                  {saving
+                    ? "Submitting…"
+                    : saved
+                      ? "Feedback submitted"
+                      : "Submit Feedback"}
+                </button>
+              </fieldset>
+            </form>
+          )}
           {error && (
             <p className="d-error" role="alert">
               {error}
@@ -486,17 +595,10 @@ function EventDetails({ event, records, onSave, basePath }) {
           )}
           {saved && (
             <p className="d-success" role="status">
-              Simulated feedback saved in this browser. Your response remains
-              available on this event in Orchard Map. No model was retrained.
+              Feedback accepted by the backend. Training queue insertion and
+              model retraining are not verified.
             </p>
           )}
-          <p className="d-caption">
-            This does not change the system detection status, contact a server,
-            or trigger a harvest notification.
-          </p>
-          <Link className="d-back" to="/analytics">
-            View Harvest Logs <ArrowUpRight size={18} />
-          </Link>
         </aside>
       </div>
     </>
