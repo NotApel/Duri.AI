@@ -1,20 +1,30 @@
-// backend/app.js
+// main file for backend duri.ai
+// guna node.js + postgres
+// so dlm ni urus semua API endpoint untuk frontend and hardware
+
+// baca something dari fail .env/ setup .env
+dotenv.config();
+
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { Pool } = require("pg");
 const { createAuth, migrateAuth } = require("./auth");
+const app = express();
 
-dotenv.config();
+// setup middleware
 
-const app = express();     // <--- PASTIKAN BARIS INI ADA
-
+// 1. CORS (bagi izin frontend (REACT) panggil API backend)
 const frontendOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173")
   .split(",").map(origin => origin.trim()).filter(Boolean);
 app.use(cors({ origin: frontendOrigins, credentials: true }));
+
+// 2. JSON parser (translate data JSON dari frontend ke (req.body))
 app.use(express.json());
 
-// Middleware untuk ESP32 (Device API Key)
+// middleware hardware: esp32 (Device API Key)
+
+// semak API key untuk esp32 jer
 const deviceAuth = (req, res, next) => {
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== process.env.DEVICE_API_KEY) {
@@ -23,7 +33,7 @@ const deviceAuth = (req, res, next) => {
   next();
 };
 
-// PostgreSQL connection pool
+// database connection - postgres
 const pool = new Pool({
   user: process.env.DB_USER || "postgres",
   host: process.env.DB_HOST || "localhost",
@@ -32,10 +42,14 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
+// authentication router
+// handle login,register dari auth.js
 const { router: authRouter, authenticate: auth } = createAuth(pool);
 app.use("/api/auth", authRouter);
 
-// Health check endpoint
+// check health
+
+// check backend hidup n connected x?
 app.get("/api/health", async (req, res) => {
   try {
     await pool.query("SELECT NOW()");
@@ -51,21 +65,14 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-// ============================================================
-// AUTHENTICATION ENDPOINTS
-// ============================================================
+// 1. farmer endpoint - table farmer
 
-// ============================================================
-// 1. FARMER ENDPOINTS (Table: farmer)
-// ============================================================
-
-// Get all farmers (supports /api/farmer and /api/farmers)
+// dpt semua maklumat farmer yg login (supports /api/farmer and /api/farmers)
 app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
   try {
-    // Ambil data sendiri sahaja
     const result = await pool.query(
       "SELECT farmer_id, full_name, username, email, phone_number, created_at, updated_at FROM farmer WHERE farmer_id = $1",
-      [req.farmer.id]
+      [req.farmer.id] // dari token JWT
     );
     res.json(result.rows);
   } catch (error) {
@@ -74,11 +81,12 @@ app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
   }
 });
 
-// Get farmer by ID
+// dpt maklumat farmer guna ID
 app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
   try {
     const { id } = req.params;
 
+    // check if farmer tu access data dia or org lain
     if (parseInt(id) !== req.farmer.id) {
   return res.status(403).json({ error: "Access denied. You can only view your own data." });
 }
@@ -97,11 +105,9 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
   }
 });
 
-// ============================================================
-// 2. FARM PLOT ENDPOINTS (Table: farm_plot)
-// ============================================================
+  // 2. farm plot endpoint - table farmplot
 
-// Get all plots for a farmer
+// dpt semua maklumat plot 
 app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
@@ -121,7 +127,7 @@ app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], aut
   }
 });
 
-// Create farm plot
+// create farmplot
 app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
@@ -152,15 +158,15 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
   }
 });
 
-// ============================================================
-// 3. SENSOR NODE ENDPOINTS (Table: sensor_node)
-// ============================================================
 
+  // 3. sensor node endpoint - table sensornode
+
+// dpt semua maklumat sensor node
 app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth, async (req, res) => {
   try {
     const { plotId } = req.params;
 
-    // 1. Check sama ada plot ni milik farmer yang login
+    // 1. check if plot ni farmer punya yg login
     const plotCheck = await pool.query(
       "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
       [plotId]
@@ -174,7 +180,7 @@ app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth
       return res.status(403).json({ error: "Access denied. You can only view nodes from your own plots." });
     }
 
-    // 2. Ambil nodes
+    // 2. select node
     const result = await pool.query(
       "SELECT * FROM sensor_node WHERE plot_id = $1 ORDER BY node_name",
       [plotId]
@@ -186,10 +192,10 @@ app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth
   }
 });
 
-// ============================================================
-// 4. DETECTION ENDPOINTS (Table: detection)
-// ============================================================
 
+  // 4. detection endpoints - table detection
+
+// dpt maklumat detection
 app.get(["/api/detection", "/api/detections"], auth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -221,6 +227,7 @@ app.get(["/api/detection", "/api/detections"], auth, async (req, res) => {
   }
 });
 
+// create detection baru 
 app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
   try {
     let {
@@ -263,10 +270,10 @@ app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
   }
 });
 
-// ============================================================
-// 5. DETECTION IMAGE ENDPOINTS (Table: detection_image)
-// ============================================================
 
+  // 5. detection image endpoints - table detection-image
+
+//dpt gambar untuk selection detection 
 app.get(["/api/detection/:detectionId/detection-image", "/api/detections/:detectionId/images"], auth, async (req, res) => {
   try {
     const { detectionId } = req.params;
@@ -281,10 +288,10 @@ app.get(["/api/detection/:detectionId/detection-image", "/api/detections/:detect
   }
 });
 
-// ============================================================
-// 6. FEEDBACK CATEGORY ENDPOINTS (Table: feedback_category)
-// ============================================================
 
+  // 6. feedback category endpoints - table feedback category
+
+// dpt senarai feedback category
 app.get(["/api/feedback-category", "/api/feedback-categories"], async (req, res) => {
   try {
     const result = await pool.query(
@@ -297,10 +304,9 @@ app.get(["/api/feedback-category", "/api/feedback-categories"], async (req, res)
   }
 });
 
-// ============================================================
-// 7. DETECTION FEEDBACK ENDPOINTS (Table: detection_feedback)
-// ============================================================
+  // 7. detection feedback endpoints - table detection feedback
 
+// post feedback untuk detection
 app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:detectionId/feedback"], auth , async (req, res) => {
   const client = await pool.connect();
   try {
@@ -314,6 +320,7 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
       });
     }
 
+    // simpan feedback
     const feedbackResult = await client.query(
       `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
        VALUES ($1, $2, $3, $4, $5)
@@ -321,23 +328,26 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
       [detectionId, farmer_id, category_id || null, correct_detection, comment_farmer || null]
     );
 
+    // update status detection
     const newStatus = correct_detection ? "VERIFIED" : "REJECTED";
     await client.query(
       "UPDATE detection SET detection_status = $1 WHERE detection_id = $2",
       [newStatus, detectionId]
     );
 
-    // Otomatis tambah rekod ke dalam training_queue
+    // add kat training queue
     await client.query(
       `INSERT INTO training_queue (feedback_id, queue_status)
        VALUES ($1, 'PENDING')`,
       [feedbackResult.rows[0].feedback_id]
     );
 
+    // simpan all the changes
     await client.query("COMMIT");
     res.status(201).json(feedbackResult.rows[0]);
   } catch (error) {
     await client.query("ROLLBACK");
+    
     console.error("Feedback error:", error);
     res.status(500).json({ error: "Failed to submit feedback" });
   } finally {
@@ -345,10 +355,9 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
   }
 });
 
-// ============================================================
-// 8. TRAINING QUEUE ENDPOINTS (Table: training_queue)
-// ============================================================
 
+  // 8. training queue endpoints - table - training queue
+// dpt all training queue
 app.get(["/api/training-queue", "/api/training_queue"], auth , async (req, res) => {
   try {
     const result = await pool.query(
@@ -361,10 +370,10 @@ app.get(["/api/training-queue", "/api/training_queue"], auth , async (req, res) 
   }
 });
 
-// ============================================================
-// 9. NOTIFICATION ENDPOINTS (Table: notification)
-// ============================================================
 
+  // 9. notification endpoint - table notfication
+
+// dpt all the noti
 app.get(["/api/notification", "/api/notifications"], auth , async (req, res) => {
   try {
     const result = await pool.query(
@@ -377,10 +386,10 @@ app.get(["/api/notification", "/api/notifications"], auth , async (req, res) => 
   }
 });
 
-// ============================================================
-// 10. ANALYTICS STATS ENDPOINT
-// ============================================================
 
+  // 10. analytics endpoint
+
+// dpt analytics stat
 app.get("/api/analytics/stats", auth, async (req, res) => {
   try {
     const total = await pool.query("SELECT COUNT(*) FROM detection");
@@ -406,9 +415,10 @@ app.get("/api/analytics/stats", auth, async (req, res) => {
   }
 });
 
-// ============================================================
-// 11. SENSOR READING ENDPOINT (For ESP32 Hardware)
-// ============================================================
+
+  // 11. sensor reading endpoint - esp32 vibration sensor
+
+// hardware hantar data
 app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   try {
     const { node_id, amplitude, frequency, duration } = req.body;
@@ -437,9 +447,10 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   }
 });
 
-// ============================================================
-// 12. IMAGE DETECTION ENDPOINT (For ESP32-CAM Hardware)
-// ============================================================
+
+  // 12. image detection endpoint - eps32 cam
+
+// hardware hantar gambar n prediction
 app.post("/api/device/detections", deviceAuth, async (req, res) => {
   const client = await pool.connect();
   
@@ -453,8 +464,6 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
       return res.status(400).json({ error: "Missing required fields: node_id, prediction, confidence" });
     }
 
-    // 1. Dapatkan reading_id terkini untuk node ini (untuk link detection dengan reading)
-    // Kita ambil reading paling baru yang dimasukkan oleh sensor getaran
     const readingQuery = await client.query(
       `SELECT reading_id FROM sensor_reading WHERE node_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
       [node_id]
@@ -466,7 +475,6 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     
     const reading_id = readingQuery.rows[0].reading_id;
 
-    // 2. Simpan rekod Detection
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
@@ -476,9 +484,7 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 3. Simpan Gambar (Jika ada)
     if (image_base64) {
-      // Simpan path sementara (dalam real production, kau akan simpan gambar ke AWS S3 atau local folder)
       const imagePath = `/uploads/detection_${detection_id}.jpg`; 
       
       await client.query(
@@ -504,9 +510,10 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
   }
 });
 
-// ============================================================
-// 13. SENSOR FUSION ENDPOINT (Gabungan Vibration + Image)
-// ============================================================
+
+  // 13. sensor fusion endpoint - vibrate + cam
+
+// gabung 2 sensor
 app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   const client = await pool.connect();
   
@@ -515,33 +522,32 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     
     const { node_id, amplitude, prediction, confidence, image_base64 } = req.body;
 
-    // Validation
     if (!node_id || amplitude === undefined || !prediction) {
       return res.status(400).json({ error: "Missing fields: node_id, amplitude, prediction" });
     }
 
-    // 1. Simpan Reading (Vibration)
+    // 1. simpan result vibration
     const readingResult = await client.query(
       `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
        VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
-      [node_id, amplitude, 50.0, 1.0] // Frequency & duration dummy untuk sementara
+      [node_id, amplitude, 50.0, 1.0]
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    // 2. LOGIK SENSOR FUSION
-    const VIBRATION_THRESHOLD = 15.0; // Threshold untuk getaran kuat
+    // 2. logik 2 sensor
+    const VIBRATION_THRESHOLD = 15.0; 
     let detection_status = "PENDING";
     let verify_required = true;
     
     if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() === "DURIAN") {
-      detection_status = "VERIFIED"; // Dua-dua setuju!
+      detection_status = "VERIFIED"; 
       verify_required = false;
     } else if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() !== "DURIAN") {
-      detection_status = "REJECTED"; // Getaran kuat, tapi AI cakap bukan durian
+      detection_status = "REJECTED"; 
       verify_required = false;
     }
 
-    // 3. Simpan Detection
+    // 3. simpan detection
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at)
        VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
@@ -549,7 +555,6 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 4. Simpan Gambar (Kalau ada)
     if (image_base64) {
       await client.query(
         `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected)
@@ -558,10 +563,9 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
       );
     }
 
-    // 5. Cipta Notification HANYA JIKA VERIFIED
+    // 5. create noti
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
-      // Ambil farmer_id dari plot -> node
       const farmerQuery = await client.query(
         `SELECT fp.farmer_id FROM farm_plot fp 
          JOIN sensor_node sn ON sn.plot_id = fp.plot_id 
@@ -602,9 +606,9 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   }
 });
 
-// ============================================================
 // 404 NOT FOUND & ERROR HANDLER
-// ============================================================
+
+//if route x wujud :
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
@@ -615,9 +619,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Something went wrong on the server" });
 });
 
-// ============================================================
+
 // START SERVER
-// ============================================================
+
 const PORT = process.env.PORT || 3000;
 async function start() {
   try {
