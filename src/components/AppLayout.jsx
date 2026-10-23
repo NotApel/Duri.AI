@@ -1,6 +1,7 @@
-import { useContext, useRef, useState } from "react";
+import { useContext, useRef, useState, useEffect } from "react"; // Added useEffect
 import { AuthContext } from "../services/AuthContext";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { apiRequest } from "../services/api"; // Added apiRequest
 import {
   LayoutDashboard,
   ClipboardList,
@@ -38,6 +39,36 @@ export default function AppLayout() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const logoutPending = useRef(false);
+
+  // NEW: Global Toast State
+  const [globalToast, setGlobalToast] = useState("");
+
+  // NEW: Global Retrain Polling
+  useEffect(() => {
+    let interval;
+    const checkStatus = async () => {
+      if (localStorage.getItem("isRetraining") === "true") {
+        try {
+          const data = await apiRequest("/analytics/retrain-status");
+          if (data.status === "success") {
+            localStorage.removeItem("isRetraining");
+            setGlobalToast("AI Retraining Complete! The model is now smarter.");
+            setTimeout(() => setGlobalToast(""), 7000);
+          } else if (data.status === "failed") {
+            localStorage.removeItem("isRetraining");
+            setGlobalToast(
+              "❌ AI Retraining failed. Please check backend logs.",
+            );
+            setTimeout(() => setGlobalToast(""), 7000);
+          }
+        } catch (err) {
+          // Ignore network errors during poll
+        }
+      }
+    };
+    interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleLogout() {
     if (logoutPending.current || !window.confirm("Log out of Duri.AI?")) return;
@@ -124,6 +155,28 @@ export default function AppLayout() {
       <nav className="app-mobile-nav" aria-label="Mobile navigation">
         {links(true)}
       </nav>
+
+      {/* NEW: GLOBAL TOAST NOTIFICATION */}
+      {globalToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "80px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#1e293b",
+            color: "white",
+            padding: "12px 24px",
+            borderRadius: "8px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            zIndex: 9999,
+            fontWeight: "bold",
+            transition: "all 0.3s ease",
+          }}
+        >
+          {globalToast}
+        </div>
+      )}
     </div>
   );
 }
