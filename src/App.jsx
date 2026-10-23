@@ -13,6 +13,7 @@ import {
   Link,
 } from "react-router-dom";
 import AuthScreen from "./components/AuthScreen";
+import DetectionProvider from "./components/DetectionProvider";
 import AppLayout from "./components/AppLayout";
 import DashboardHome from "./components/DashboardHome";
 import OrchardMap from "./components/OrchardMap";
@@ -60,7 +61,12 @@ function ProtectedApp() {
       </main>
     );
   return farmer ? (
-    <AppLayout />
+    <DetectionProvider
+      key={String(farmer.farmer_id)}
+      farmerId={farmer.farmer_id}
+    >
+      <AppLayout />
+    </DetectionProvider>
   ) : (
     <Navigate to={signedOut ? "/" : "/login"} replace />
   );

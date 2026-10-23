@@ -102,9 +102,9 @@ export default function AppLayout() {
       </header>
       <main id="main-content" className="app-main">
         <p className="ui-notice app-preview">
-          Development preview. Map positions and node updates are simulated.
-          Detection and training screens use backend records; hardware and model
-          evaluation remain unverified.
+          Development preview. Map geometry and node updates are simulated.
+          Orchard Map detections and Harvest Logs use backend records. Hardware
+          operation and model training remain unverified.
         </p>
         {sessionError && (
           <p className="ui-notice ui-error mb-4" role="alert">

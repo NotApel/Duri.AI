@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { fetchAlerts } from "../services/api";
-import { detectionType } from "../services/detectionData";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useDetections } from "../services/DetectionContext";
+import { csvCell, detectionType } from "../services/detectionData";
 import "./Detections.css";
 
 const timeZone = "Asia/Kuala_Lumpur";
@@ -23,25 +24,13 @@ export default function HarvestAnalytics() {
   const [type, setType] = useState("");
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchAlerts({ signal: controller.signal })
-      .then((data) => {
-        setRecords(data);
-        setLoadError("");
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") setLoadError(err.message);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [attempt]);
+  const {
+    events: records,
+    loading,
+    error: loadError,
+    refresh,
+    loaded,
+  } = useDetections();
   const events = records.filter(
     (event) => !type || detectionType(event) === type,
   );
@@ -63,28 +52,25 @@ export default function HarvestAnalytics() {
         ]);
         const doc = new jsPDF();
         doc.setFontSize(16);
-        doc.text("Duri.AI - harvest logs", 14, 18);
+        doc.text("Duri.AI - backend harvest logs", 14, 18);
         doc.setFontSize(10);
-        doc.text("Backend records. All times are Malaysia time (MYT).", 14, 26);
+        doc.text(
+          "Latest API records. All times are Malaysia time (MYT).",
+          14,
+          26,
+        );
         autoTable(doc, { startY: 33, head: [headers], body: rows });
-        doc.save("DuriAI_Harvest_Logs.pdf");
+        doc.save("DuriAI_Backend_Logs.pdf");
       } else {
         const content = [headers, ...rows]
-          .map((row) =>
-            row
-              .map((value) => {
-                const safe = /^[=+@\-\t\r]/.test(value) ? "'" + value : value;
-                return `"${safe.replaceAll('"', '""')}"`;
-              })
-              .join(","),
-          )
+          .map((row) => row.map(csvCell).join(","))
           .join("\r\n");
         const url = URL.createObjectURL(
           new Blob([content], { type: "text/csv;charset=utf-8" }),
         );
         const link = document.createElement("a");
         link.href = url;
-        link.download = "DuriAI_Harvest_Logs.csv";
+        link.download = "DuriAI_Backend_Logs.csv";
         document.body.append(link);
         link.click();
         link.remove();
@@ -110,15 +96,16 @@ export default function HarvestAnalytics() {
         <div>
           <strong>Backend records</strong>
           <span>
-            Same detection source as Orchard Map · all times in Malaysia time
-            (MYT)
+            Same records as Orchard Map · latest API results, currently up to
+            ten · all times in Malaysia time (MYT)
           </span>
         </div>
       </div>
       <div className="d-filters log-toolbar">
-        <label>
+        <label htmlFor="log-detection-type">
           Detection type
           <select
+            id="log-detection-type"
             value={type}
             onChange={(event) => setType(event.target.value)}
           >
@@ -145,29 +132,27 @@ export default function HarvestAnalytics() {
           {exporting ? "Preparing export…" : "Export PDF"}
         </button>
       </div>
-      {error && (
-        <p className="d-error" role="alert">
-          {error}
-        </p>
-      )}
+      <button className="ui-button" disabled={loading} onClick={refresh}>
+        Refresh logs
+      </button>
       {loading && (
         <p className="ui-notice" role="status">
-          Loading harvest logs…
+          Loading backend harvest logs…
         </p>
       )}
       {loadError && (
         <div className="ui-notice ui-error" role="alert">
-          {loadError}{" "}
-          <button
-            className="ui-button"
-            onClick={() => {
-              setLoading(true);
-              setAttempt((value) => value + 1);
-            }}
-          >
+          {loadError}
+          {loaded ? " Displayed records may be stale." : ""}{" "}
+          <button className="ui-button" onClick={refresh}>
             Try again
           </button>
         </div>
+      )}
+      {error && (
+        <p className="d-error" role="alert">
+          {error}
+        </p>
       )}
       <div className="ui-table-wrap">
         <table className="ui-table">
@@ -187,15 +172,29 @@ export default function HarvestAnalytics() {
             {events.map((event, index) => (
               <tr key={event.id}>
                 {rows[index].map((value, column) => (
-                  <td key={column}>{value}</td>
+                  <td key={column}>
+                    {column === 0 ? (
+                      <Link
+                        className="ui-text-link"
+                        to={`/map/events/${encodeURIComponent(event.id)}`}
+                        aria-label={`View event ${event.id} on ${value}`}
+                      >
+                        {value}
+                      </Link>
+                    ) : (
+                      value
+                    )}
+                  </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
-        {!loading && !loadError && !events.length && (
+        {loaded && !loading && !loadError && !events.length && (
           <p className="p-6 text-center" role="status">
-            No detections match this type.
+            {records.length
+              ? "No detections match this type."
+              : "No backend detections are available yet."}
           </p>
         )}
       </div>

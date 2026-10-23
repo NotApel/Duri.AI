@@ -276,9 +276,9 @@ export default function DashboardHome() {
                       <td>
                         <Link
                           className="ui-text-link"
-                          to={`/map/events/${event.id}`}
+                          to="/map"
                         >
-                          Review {event.id}
+                          Open backend detections
                         </Link>
                       </td>
                     </tr>
