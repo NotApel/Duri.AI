@@ -11,13 +11,12 @@ const path = require("path");
 const { exec, spawn } = require("child_process");
 const rateLimit = require("express-rate-limit");
 const { createAuth, migrateAuth } = require("./auth");
-
 const app = express();
 
 // baca something dari fail .env/ setup .env
 dotenv.config();
 
-// setup middleware
+  // setup middleware
 
 // 1. CORS (bagi izin frontend (REACT) panggil API backend)
 const frontendOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173")
@@ -27,7 +26,7 @@ app.use(cors({ origin: frontendOrigins, credentials: true }));
 // 2. JSON parser (translate data JSON dari frontend ke (req.body))
 app.use(express.json({ limit: "50mb" }));
 
-// middleware hardware: esp32 (Device API Key)
+  // middleware hardware: esp32 (Device API Key)
 
 // semak API key untuk esp32 jer
 const deviceAuth = (req, res, next) => {
@@ -56,18 +55,19 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-// authentication router
+  // authentication router
+
 // handle login,register dari auth.js
 const { router: authRouter, authenticate: auth } = createAuth(pool);
 app.use("/api/auth", authRouter);
-
-// check health
 
 // RETRAINING VARIABLES
 let retrainStatus = "idle";
 let retrainError = "";
 let lastRetrainTime = "Not yet retrained";
 let currentModelAccuracy = 99.93;
+
+  // check health
 
 // check backend hidup n connected x?
 app.get("/api/health", async (req, res) => {
@@ -84,9 +84,9 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-// 1. farmer endpoint - table farmer
+  // 1. farmer endpoint - table farmer
 
-// dpt semua maklumat farmer yg login (supports /api/farmer and /api/farmers)
+// dpt profil farmer yang sedang login
 app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -105,7 +105,7 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
     const { id } = req.params;
 
     // check if farmer tu access data dia or org lain
-    if (parseInt(id) !== req.farmer.id) {
+    if (String(id) !== String(req.farmer.id)) {
   return res.status(403).json({ error: "Access denied. You can only view your own data." });
 }
 
@@ -128,7 +128,7 @@ app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], aut
   try {
     const { farmerId } = req.params;
 
-    if (parseInt(farmerId) !== req.farmer.id) {
+    if (String(farmerId) !== String(req.farmer.id)) {
   return res.status(403).json({ error: "Access denied." });
 }
 
@@ -147,12 +147,17 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
   try {
     const { farmerId } = req.params;
 
-    if (parseInt(farmerId) !== req.farmer.id) {
+    if (String(farmerId) !== String(req.farmer.id)) {
     return res.status(403).json({ error: "Access denied." });
 }
 
     const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
-    if (!farm_name || !plot_name || !latitude || !longitude) {
+    if (
+  !farm_name || 
+  !plot_name || 
+  latitude === undefined || latitude === null || 
+  longitude === undefined || longitude === null
+) {
       return res.status(400).json({
         error: "Farm name, plot name, latitude, and longitude are required",
       });
@@ -174,14 +179,12 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
   }
 });
 
-  // 3. sensor node endpoint - table sensornode
-
-// dpt semua maklumat sensor node
-app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth, async (req, res) => {
+// Edit farm plot
+app.patch("/api/plots/:plotId", auth, async (req, res) => {
   try {
     const { plotId } = req.params;
+    const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
 
-    // 1. check if plot ni farmer punya yg login
     const plotCheck = await pool.query(
       "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
       [plotId]
@@ -191,22 +194,100 @@ app.get(["/api/farm-plot/:plotId/sensor-node", "/api/plots/:plotId/nodes"], auth
       return res.status(404).json({ error: "Plot not found" });
     }
 
-    if (plotCheck.rows[0].farmer_id !== req.farmer.id) {
-      return res.status(403).json({ error: "Access denied. You can only view nodes from your own plots." });
+    if (String(plotCheck.rows[0].farmer_id) !== String(req.farmer.id)) {
+      return res.status(403).json({ error: "Access denied." });
     }
 
-    // 2. select node
     const result = await pool.query(
-      "SELECT * FROM sensor_node WHERE plot_id = $1 ORDER BY node_name",
-      [req.params.plotId],
+      `UPDATE farm_plot 
+       SET farm_name = $1, plot_name = $2, plot_size = $3, latitude = $4, longitude = $5, updated_at = NOW()
+       WHERE plot_id = $6
+       RETURNING *`,
+      [farm_name, plot_name, plot_size || null, latitude, longitude, plotId]
     );
-    res.json(result.rows);
+
+    res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch nodes" });
+    console.error("Update plot error:", error);
+    res.status(500).json({ error: "Failed to update plot" });
   }
 });
 
+  // 3. sensor node endpoint - table sensornode
 
+// dpt semua maklumat sensor node
+app.post("/api/plots/:plotId/nodes", auth, async (req, res) => {
+  try {
+    const { plotId } = req.params;
+    const { node_name, firmware_version } = req.body;
+
+    const plotCheck = await pool.query(
+      "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
+      [plotId]
+    );
+
+    if (plotCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Plot not found" });
+    }
+
+    if (String(plotCheck.rows[0].farmer_id) !== String(req.farmer.id)) {
+      return res.status(403).json({ error: "Access denied." });
+    }
+
+    if (!node_name || node_name.trim().length === 0) {
+      return res.status(400).json({ error: "Node name is required" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO sensor_node (plot_id, node_name, status, battery_level, firmware_version, last_ping_at)
+       VALUES ($1, $2, 'OFFLINE', NULL, $3, NULL)
+       RETURNING *`,
+      [plotId, node_name.trim(), firmware_version || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Register node error:", error);
+    res.status(500).json({ error: "Failed to register node" });
+  }
+});
+
+// Update sensor node
+app.patch("/api/nodes/:nodeId", auth, async (req, res) => {
+  try {
+    const { nodeId } = req.params;
+    const { node_name, firmware_version } = req.body;
+
+    const nodeCheck = await pool.query(
+      `SELECT sn.node_id, fp.farmer_id 
+       FROM sensor_node sn 
+       JOIN farm_plot fp ON sn.plot_id = fp.plot_id 
+       WHERE sn.node_id = $1`,
+      [nodeId]
+    );
+
+    if (nodeCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Node not found" });
+    }
+
+    if (String(nodeCheck.rows[0].farmer_id) !== String(req.farmer.id)) {
+      return res.status(403).json({ error: "Access denied." });
+    }
+
+    const result = await pool.query(
+      `UPDATE sensor_node 
+       SET node_name = $1, firmware_version = $2
+       WHERE node_id = $3
+       RETURNING *`,
+      [node_name, firmware_version || null, nodeId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Update node error:", error);
+    res.status(500).json({ error: "Failed to update node" });
+  }
+});
   // 4. detection endpoints - table detection
 
 // dpt maklumat detection
@@ -228,7 +309,7 @@ app.get(["/api/detection", "/api/detections"], auth, async (req, res) => {
   }
 });
 
-// create detection baru 
+// create detection baru
 app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
   try {
     let {
@@ -265,7 +346,7 @@ app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
 
   // 5. detection image endpoints - table detection-image
 
-//dpt gambar untuk selection detection 
+//dpt gambar untuk selection detection
 app.get(["/api/detection/:detectionId/detection-image", "/api/detections/:detectionId/images"], auth, async (req, res) => {
   try {
     const { detectionId } = req.params;
@@ -330,7 +411,7 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
       const dir = path.join(__dirname, "feedback_images");
       if (!fs.existsSync(dir)) fs.mkdirSync(dir);
       const base64Data = image_base64.replace(/^data:image\/\w+;base64,/, "");
-      fs.writeFileSync(path.join(dir, `feedback_${detectionId}.jpg`), base64Data, "base64");
+      fs.writeFileSync(path.join(dir, `feedback_${detectionId}.jpg`), Buffer.from(base64Data, 'base64'));
     }
 
     await client.query("COMMIT");
@@ -363,18 +444,42 @@ app.get(
   // 9. notification endpoint - table notfication
 
 // dpt all the noti
-app.get(["/api/notification", "/api/notifications"], auth , async (req, res) => {
+app.get(["/api/notification", "/api/notifications"], auth, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM notification ORDER BY created_at DESC LIMIT 50"
+      "SELECT * FROM notification WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 50",
+      [req.farmer.id]
     );
     res.json(result.rows);
   } catch (error) {
     console.error("Get notification error:", error);
-    res.status(500).json({ error: "Failed to fetch notifications", details: error.message });
+    res.status(500).json({ error: "Failed to fetch notifications" });
   }
 });
 
+// Mark notification as read
+app.patch("/api/notifications/:notificationId/read", auth, async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+
+    const result = await pool.query(
+      `UPDATE notification 
+       SET is_read = TRUE 
+       WHERE notification_id = $1 AND farmer_id = $2 
+       RETURNING *`,
+      [notificationId, req.farmer.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Notification not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Mark read error:", error);
+    res.status(500).json({ error: "Failed to mark notification as read" });
+  }
+});
 
   // 10. analytics endpoint
 
@@ -518,7 +623,7 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
 });
 
 
-  // 12. image detection endpoint - eps32 cam
+  // 12. image detection endpoint - esp32 cam
 
 // hardware hantar gambar n prediction
 app.post("/api/device/detections", deviceAuth, async (req, res) => {
@@ -596,27 +701,25 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
 
     // 2. logik 2 sensor
 
-const CONFIDENCE_THRESHOLD = 90.0; // Threshold confidence 90%
+const CONFIDENCE_THRESHOLD = 90.0; // Threshold keyakinan AI
 
 let detection_status = "PENDING";
 let verify_required = true;
 
-// Check: Getaran kuat, prediction DURIAN, DAN confidence >= 90
-if (
-  amplitude > VIBRATION_THRESHOLD &&
-  prediction.toUpperCase() === "DURIAN" &&
-  confidence >= CONFIDENCE_THRESHOLD
-) {
+// 1. AI yakin > 90% DAN ia DURIAN
+if (prediction.toUpperCase() === "DURIAN" && confidence >= CONFIDENCE_THRESHOLD) {
   detection_status = "VERIFIED";
   verify_required = false;
 } 
-// Check: Getaran kuat, tapi prediction bukan DURIAN (atau confidence rendah)
-else if (
-  amplitude > VIBRATION_THRESHOLD &&
-  (prediction.toUpperCase() !== "DURIAN" || confidence < CONFIDENCE_THRESHOLD)
-) {
-  detection_status = "REJECTED"; // False alarm / AI tak yakin
+// 2. AI yakin > 90% TAPI ia BUKAN DURIAN
+else if (prediction.toUpperCase() !== "DURIAN" && confidence >= CONFIDENCE_THRESHOLD) {
+  detection_status = "REJECTED";
   verify_required = false;
+}
+// 3. AI tak cukup yakin (< 90%), tak kira apa prediction
+else {
+  detection_status = "PENDING";
+  verify_required = true;
 }
 
     // 3. simpan detection
