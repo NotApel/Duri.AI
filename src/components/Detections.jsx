@@ -39,6 +39,8 @@ export default function Detections({ mode = "map" }) {
     receiptWarning,
     loaded,
   } = useDetections();
+  // REJECTED/VERIFIED are backend event states, not evidence of farmer review.
+  // Only this farmer's acknowledged feedback receipt marks an event reviewed.
   const records = Object.fromEntries(
     events
       .filter((item) => receipts[item.id]?.eventTime === item.time)

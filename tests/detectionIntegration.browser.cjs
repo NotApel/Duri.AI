@@ -158,7 +158,7 @@ async function main() {
   ).rows[0];
   const events = (
     await pool.query(
-      "INSERT INTO detection (reading_id,prediction,confidence,detection_at) VALUES ($1,'DURIAN',87,'2026-10-20T18:05:00Z'),($1,'NOT_DURIAN',63,'2026-10-20T17:00:00Z') RETURNING detection_id",
+      "INSERT INTO detection (reading_id,prediction,confidence,detection_status,detection_at) VALUES ($1,'DURIAN',87,'PENDING','2026-10-20T18:05:00Z'),($1,'NOT_DURIAN',63,'REJECTED','2026-10-20T17:00:00Z') RETURNING detection_id",
       [reading.reading_id],
     )
   ).rows;
@@ -316,10 +316,39 @@ async function main() {
     .click();
   await page.locator(".d-event").waitFor();
   assert.equal(await page.locator(".d-event").count(), 1);
-  await page.locator(".d-event").click();
+  // A backend rejection is not a completed farmer review. Open it via the logs.
+  await page
+    .getByRole("link", { name: "View events in Harvest Logs", exact: false })
+    .click();
+  await page
+    .getByRole("link", { name: `View event ${second} on`, exact: false })
+    .click();
   await page
     .getByRole("option", { name: "Other", exact: true })
     .waitFor({ state: "attached" });
+  await page
+    .getByText("Rejected is the reported event status.", { exact: false })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Submit feedback", exact: true })
+      .isEnabled(),
+    true,
+  );
+  assert.equal(
+    await page.getByRole("radio", { name: "Durian", exact: true }).isEnabled(),
+    true,
+  );
+  assert.equal(await page.getByLabel("Detailed comments").isEditable(), true);
+  assert.equal(
+    (
+      await pool.query(
+        "SELECT count(*) FROM detection_feedback WHERE detection_id=$1",
+        [second],
+      )
+    ).rows[0].count,
+    "0",
+  );
   // Only image bytes are stubbed; metadata comes from the actual database/API.
   await page.route("**/test-only/first.svg", (route) =>
     route.fulfill({
@@ -415,6 +444,24 @@ async function main() {
       )
     ).rows[0].prediction,
     "NOT_DURIAN",
+  );
+  assert.equal(
+    (
+      await pool.query(
+        "SELECT detection_status FROM detection WHERE detection_id=$1",
+        [second],
+      )
+    ).rows[0].detection_status,
+    "VERIFIED",
+  );
+  assert.equal(
+    (
+      await pool.query(
+        "SELECT count(*) FROM detection_feedback WHERE detection_id=$1",
+        [second],
+      )
+    ).rows[0].count,
+    "1",
   );
   await page
     .getByRole("link", { name: "View Harvest Logs", exact: false })

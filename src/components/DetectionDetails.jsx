@@ -205,6 +205,12 @@ export default function DetectionDetails({
           <p>
             Record your own assessment. The model prediction remains separate.
           </p>
+          {event.status === "REJECTED" && !receipt && (
+            <p className="d-notice">
+              Rejected is the reported event status. You can still review this
+              event and correct the prediction below.
+            </p>
+          )}
           {receipt ? (
             <div className="d-success" role="status">
               <strong>Feedback accepted by the server.</strong>

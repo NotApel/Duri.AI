@@ -31,6 +31,12 @@ labelled simulations; this change does not connect physical hardware.
    records to CSV or PDF. CSV cells escape quotes and neutralize formulas from
    untrusted backend node names.
 
+A backend `REJECTED` status does not mean the farmer has reviewed the event.
+Opening a rejected event from Harvest Logs still shows the feedback form when no
+acknowledged farmer-feedback receipt exists. The farmer can classify it as Durian
+and explain the correction. An actual accepted farmer submission retains its
+receipt and duplicate-submit protection. Status alone never locks the form.
+
 Network errors preserve previous records with a stale-data warning and disable
 feedback/exports until a successful refresh. Offline feedback is disabled; there
 is no offline submission queue or service-worker caching. Requests time out after
