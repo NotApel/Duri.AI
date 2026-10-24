@@ -24,5 +24,8 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "allowScripts": {
+    "bcrypt@6.0.0": true
+  }
 }
