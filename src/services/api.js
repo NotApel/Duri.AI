@@ -25,19 +25,19 @@ export async function apiRequest(path, options = {}) {
     "/auth/forgot-password",
     "/auth/reset-password",
   ].includes(path);
-  
+
   const headers = new Headers(options.headers);
   const token = publicAuth ? null : readToken();
-  
+
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  
+
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...options,
       headers,
       credentials: "include",
-      signal: options.signal || AbortSignal.timeout(15000),
+      signal: options.signal || AbortSignal.timeout(180000),
     });
   } catch (error) {
     if (error.name === "AbortError") throw error;
@@ -55,7 +55,7 @@ export async function apiRequest(path, options = {}) {
             throw new Error("The server returned an invalid response.");
           return {};
         });
-          
+
   if (!response.ok) {
     if (
       response.status === 401 &&
@@ -144,7 +144,8 @@ export async function logoutFarmer() {
 // AI TRAINING FUNCTIONS (Damia's Code)
 // ==========================================
 export const fetchTraining = () => apiRequest("/analytics/training");
-export const retrain = () => apiRequest("/analytics/retrain", { method: "POST" });
+export const retrain = () =>
+  apiRequest("/analytics/retrain", { method: "POST" });
 
 export const getCurrentFarmer = async () => {
   try {

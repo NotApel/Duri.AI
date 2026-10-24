@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TrendingUp, RefreshCw } from "lucide-react";
+import { TrendingUp, RefreshCw, Clock } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -9,17 +9,19 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { fetchTraining, retrain } from "../services/api"; // Use secure API functions
+import { fetchTraining, retrain, apiRequest } from "../services/api";
 
 export default function TrainingHistory() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [retraining, setRetraining] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  const maxEstimate = 300;
 
   const loadStats = async () => {
-    setLoading(true);
     try {
-      const data = await fetchTraining(); // Secure fetch with token
+      const data = await fetchTraining();
       setStats(data);
     } catch (err) {
       console.error(err);
@@ -30,28 +32,91 @@ export default function TrainingHistory() {
 
   useEffect(() => {
     loadStats();
+    const isRetrainingStored = localStorage.getItem("isRetraining") === "true";
+    if (isRetrainingStored) {
+      setRetraining(true);
+      const startTime = parseInt(
+        localStorage.getItem("retrainStartTime") || Date.now(),
+      );
+      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+    }
   }, []);
+
+  useEffect(() => {
+    let timer;
+    if (retraining) {
+      timer = setInterval(() => {
+        const startTime = parseInt(
+          localStorage.getItem("retrainStartTime") || Date.now(),
+        );
+        const newElapsed = Math.floor((Date.now() - startTime) / 1000);
+        setElapsedTime(newElapsed);
+      }, 1000);
+    } else {
+      setElapsedTime(0);
+    }
+    return () => clearInterval(timer);
+  }, [retraining]);
+
+  useEffect(() => {
+    let interval;
+    if (retraining) {
+      interval = setInterval(async () => {
+        try {
+          const data = await apiRequest("/analytics/retrain-status");
+          await loadStats();
+
+          if (data.status === "success" || data.status === "failed") {
+            setRetraining(false);
+            localStorage.removeItem("isRetraining");
+            localStorage.removeItem("retrainStartTime");
+
+            if (data.status === "success") {
+              alert("AI Retraining Complete! The model is now smarter.");
+            } else {
+              alert("AI Retraining failed. Please check backend logs.");
+            }
+          }
+        } catch (err) {
+          console.error("Error checking status", err);
+        }
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [retraining]);
 
   const handleRetrain = async () => {
     setRetraining(true);
+    localStorage.setItem("isRetraining", "true");
+    localStorage.setItem("retrainStartTime", Date.now().toString());
+
     try {
-      await retrain(); // Secure POST with token
-      alert("Retraining started! Check the backend terminal.");
-      loadStats();
+      await retrain();
     } catch (err) {
-      alert(`Retraining failed: ${err.message}`);
-    } finally {
-      setRetraining(false);
+      if (err.message.includes("already in progress")) {
+        // Ignore
+      } else {
+        setRetraining(false);
+        localStorage.removeItem("isRetraining");
+        alert(`Retraining failed to start: ${err.message}`);
+      }
     }
   };
 
+  const formatTime = (totalSeconds) => {
+    const m = Math.floor(totalSeconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (totalSeconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  const progressPercent = Math.min((elapsedTime / maxEstimate) * 100, 99);
+  const remainingSeconds = Math.max(maxEstimate - elapsedTime, 0);
+
   if (loading) return <p className="ui-notice">Loading training history...</p>;
   if (!stats)
-    return (
-      <p className="ui-notice ui-error">
-        Failed to load AI stats. Please refresh.
-      </p>
-    );
+    return <p className="ui-notice ui-error">Failed to load AI stats.</p>;
 
   return (
     <div className="ui-page">
@@ -60,7 +125,7 @@ export default function TrainingHistory() {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
         }}
       >
         <div>
@@ -70,21 +135,77 @@ export default function TrainingHistory() {
           </p>
         </div>
 
-        <button
-          className="ui-button primary"
-          onClick={handleRetrain}
-          disabled={retraining}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            width: "260px",
+          }}
         >
-          <RefreshCw
-            size={18}
-            className={retraining ? "animate-spin" : ""}
-            style={{ marginRight: "8px" }}
-          />
-          {retraining ? "Retraining AI..." : "Retrain AI Now"}
-        </button>
+          <button
+            className="ui-button primary"
+            onClick={handleRetrain}
+            disabled={retraining}
+            style={{ width: "100%" }}
+          >
+            <RefreshCw
+              size={18}
+              className={retraining ? "animate-spin" : ""}
+              style={{ marginRight: "8px" }}
+            />
+            {retraining ? "Retraining AI..." : "Retrain AI Now"}
+          </button>
+
+          {retraining && (
+            <div style={{ marginTop: "12px", width: "100%" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "12px",
+                  color: "#37583a",
+                  marginBottom: "4px",
+                }}
+              >
+                <span>
+                  <Clock
+                    size={12}
+                    style={{ display: "inline", marginRight: "4px" }}
+                  />{" "}
+                  {formatTime(elapsedTime)}
+                </span>
+
+                <span>
+                  {remainingSeconds === 0
+                    ? "Finishing up..."
+                    : `Est. ${formatTime(remainingSeconds)} left`}
+                </span>
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "6px",
+                  background: "#e2e8f0",
+                  borderRadius: "3px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${progressPercent}%`,
+                    height: "100%",
+                    background: "#37583a",
+                    transition: "width 1s linear",
+                  }}
+                ></div>
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
-      <dl className="ui-summary">
+      <dl className="ui-summary" style={{ marginTop: "20px" }}>
         <div>
           <dt>Farmer Points</dt>
           <dd>{stats.farmerPoints}</dd>
@@ -95,7 +216,9 @@ export default function TrainingHistory() {
         </div>
         <div>
           <dt>Waiting for Retraining</dt>
-          <dd>{stats.pendingTraining} images</dd>
+          <dd style={{ fontSize: "24px", lineHeight: "1.2" }}>
+            {stats.pendingTraining} images
+          </dd>
         </div>
         <div>
           <dt>Current AI Accuracy</dt>
