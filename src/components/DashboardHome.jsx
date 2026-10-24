@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { demoDetections } from "../data/demoDetections";
-import { apiRequest } from "../services/api";
+import { apiRequest, fetchTraining } from "../services/api";
 import HarvestChart from "./HarvestChart";
 
 const demoNodes = [
@@ -51,18 +51,32 @@ export default function DashboardHome() {
       try {
         const read = (path) =>
           apiRequest(`/${path}`, { signal: controller.signal });
+
+        // Optional training statistics must not delay core orchard data.
+        const training = fetchTraining({ signal: controller.signal }).catch(
+          () => null,
+        );
         const [detections, stats, nodes] = await Promise.all([
           read("detections"),
           read("analytics/stats"),
           read("plots/1/nodes"),
         ]);
+
         if (
           !Array.isArray(detections) ||
           !Array.isArray(nodes) ||
           typeof stats.total !== "number"
         )
           throw new Error("Unexpected response");
-        setData({ detections, stats, nodes });
+
+        if (controller.signal.aborted) return;
+        setData({ detections, stats, nodes, trainingStats: null });
+        training.then((trainingStats) => {
+          if (!controller.signal.aborted)
+            setData((current) =>
+              current ? { ...current, trainingStats } : current,
+            );
+        });
       } catch (err) {
         if (err.name !== "AbortError")
           setError(
@@ -148,6 +162,25 @@ export default function DashboardHome() {
                 {data.nodes.length}
               </dd>
             </div>
+
+            {/* === NEW ADDITION: 3 New Cards for AI Stats === */}
+            <div>
+              <dt>Feedback points · backend calculation</dt>
+              <dd>{data.trainingStats?.farmerPoints ?? "Unavailable"}</dd>
+            </div>
+            <div>
+              <dt>Feedback records</dt>
+              <dd>{data.trainingStats?.totalCorrections ?? "Unavailable"}</dd>
+            </div>
+            <div>
+              <dt>Evaluated AI accuracy</dt>
+              <dd style={{ color: "var(--ui-green)", fontWeight: "bold" }}>
+                {data.trainingStats?.accuracy == null
+                  ? "Unavailable"
+                  : `${data.trainingStats.accuracy}%`}
+              </dd>
+            </div>
+            {/* === END NEW ADDITION === */}
           </dl>
           <div className="ui-page-header">
             <h2>Sensor nodes · Plot 1</h2>
@@ -243,9 +276,9 @@ export default function DashboardHome() {
                       <td>
                         <Link
                           className="ui-text-link"
-                          to={`/map/events/${event.id}`}
+                          to="/map"
                         >
-                          Review {event.id}
+                          Open backend detections
                         </Link>
                       </td>
                     </tr>

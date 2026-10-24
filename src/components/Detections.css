@@ -419,3 +419,67 @@
 .d-page-title[tabindex="-1"]:focus {
   outline: none;
 }
+
+/* Evidence remains inside the existing details grid. */
+.detections,
+.d-detail-grid > *,
+.d-feedback fieldset {
+  min-width: 0;
+}
+.d-demo > div,
+.d-camera > *,
+.d-measurements > div {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.d-image-viewer {
+  display: grid;
+  gap: 12px;
+  margin-block: 20px;
+}
+.d-image-viewer img {
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border: 1px solid var(--ui-border);
+}
+.d-image-viewer figcaption {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.d-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.d-image-dialog {
+  width: min(960px, 94vw);
+  max-height: 90vh;
+  padding: 20px;
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.d-image-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+.d-image-dialog img {
+  max-height: 70vh;
+  margin-top: 12px;
+}
+.d-facts dd,
+.d-feedback p {
+  overflow-wrap: anywhere;
+}
+.detections .ui-table .ui-text-link {
+  display: inline-block;
+  padding-block: 8px;
+}
+@media (max-width: 480px) {
+  .d-measurements {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
