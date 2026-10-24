@@ -1,6 +1,6 @@
 import { useContext, useRef, useState, useEffect } from "react"; // Added useEffect
 import { AuthContext } from "../services/AuthContext";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { apiRequest } from "../services/api"; // Added apiRequest
 import {
   LayoutDashboard,
