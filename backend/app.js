@@ -423,6 +423,12 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
       return res.status(400).json({ error: "Farmer ID and correct_detection are required" });
     }
 
+    if (!correct_detection && !category_id) {
+      return res.status(400).json({ 
+        error: "Category is required when marking as false alarm (No Durian)." 
+      });
+    }
+    
     const feedbackResult = await client.query(
       `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -784,7 +790,7 @@ else {
             detection_id,
             farmerQuery.rows[0].farmer_id,
             "Durian Detected!",
-            `Durian jatuh dikesan dengan ${confidence}% keyakinan.`,
+            `Durian fall detected with ${confidence}% confidence.`,
             false,
           ],
         );
