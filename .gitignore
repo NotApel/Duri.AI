@@ -1,0 +1,39 @@
+# Dependencies and generated builds
+node_modules/
+dist/
+dist-ssr/
+
+# Local environment files; keep safe configuration examples trackable
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local feedback/training output and development helpers
+feedback_images/
+accuracy.txt
+/data.sql
+/run_sql.js
+/simulate_feedback.py
+/test_monkey.png
+
+# Editor and operating-system files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
