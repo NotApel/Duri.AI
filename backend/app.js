@@ -595,17 +595,29 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     const reading_id = readingResult.rows[0].reading_id;
 
     // 2. logik 2 sensor
-    const VIBRATION_THRESHOLD = 15.0; 
-    let detection_status = "PENDING";
-    let verify_required = true;
-    
-    if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() === "DURIAN") {
-      detection_status = "VERIFIED"; 
-      verify_required = false;
-    } else if (amplitude > VIBRATION_THRESHOLD && prediction.toUpperCase() !== "DURIAN") {
-      detection_status = "REJECTED"; 
-      verify_required = false;
-    }
+
+const CONFIDENCE_THRESHOLD = 90.0; // Threshold confidence 90%
+
+let detection_status = "PENDING";
+let verify_required = true;
+
+// Check: Getaran kuat, prediction DURIAN, DAN confidence >= 90
+if (
+  amplitude > VIBRATION_THRESHOLD &&
+  prediction.toUpperCase() === "DURIAN" &&
+  confidence >= CONFIDENCE_THRESHOLD
+) {
+  detection_status = "VERIFIED";
+  verify_required = false;
+} 
+// Check: Getaran kuat, tapi prediction bukan DURIAN (atau confidence rendah)
+else if (
+  amplitude > VIBRATION_THRESHOLD &&
+  (prediction.toUpperCase() !== "DURIAN" || confidence < CONFIDENCE_THRESHOLD)
+) {
+  detection_status = "REJECTED"; // False alarm / AI tak yakin
+  verify_required = false;
+}
 
     // 3. simpan detection
     const detectionResult = await client.query(
