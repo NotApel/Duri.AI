@@ -37,7 +37,7 @@ const deviceAuth = (req, res, next) => {
   next();
 };
 
-// rate limiter
+// rate limiter/ max 5 login
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -123,7 +123,7 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth ,async (req, res) => {
 
   // 2. farm plot endpoint - table farmplot
 
-// dpt semua maklumat plot 
+// dpt semua maklumat plot
 app.get(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], auth, async (req, res) => {
   try {
     const { farmerId } = req.params;
@@ -179,7 +179,7 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
   }
 });
 
-// Edit farm plot
+// edit farmplot
 app.patch("/api/plots/:plotId", auth, async (req, res) => {
   try {
     const { plotId } = req.params;
@@ -252,16 +252,47 @@ app.post("/api/plots/:plotId/nodes", auth, async (req, res) => {
   }
 });
 
-// Update sensor node
+// get all sensor nodes for a plot
+app.get("/api/plots/:plotId/nodes", auth, async (req, res) => {
+  try {
+    const { plotId } = req.params;
+
+    // 1. check plot milik farmer
+    const plotCheck = await pool.query(
+      "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
+      [plotId]
+    );
+
+    if (plotCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Plot not found" });
+    }
+
+    if (String(plotCheck.rows[0].farmer_id) !== String(req.farmer.id)) {
+      return res.status(403).json({ error: "Access denied." });
+    }
+
+    // 2. ambil nodes
+    const result = await pool.query(
+      "SELECT * FROM sensor_node WHERE plot_id = $1 ORDER BY node_name",
+      [plotId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get nodes error:", error);
+    res.status(500).json({ error: "Failed to fetch nodes" });
+  }
+});
+
+// update sensor node
 app.patch("/api/nodes/:nodeId", auth, async (req, res) => {
   try {
     const { nodeId } = req.params;
     const { node_name, firmware_version } = req.body;
 
     const nodeCheck = await pool.query(
-      `SELECT sn.node_id, fp.farmer_id 
+      `SELECT sn.node_id, fp.farmer_id
        FROM sensor_node sn 
-       JOIN farm_plot fp ON sn.plot_id = fp.plot_id 
+       JOIN farm_plot fp ON sn.plot_id = fp.plot_id
        WHERE sn.node_id = $1`,
       [nodeId]
     );
@@ -275,7 +306,7 @@ app.patch("/api/nodes/:nodeId", auth, async (req, res) => {
     }
 
     const result = await pool.query(
-      `UPDATE sensor_node 
+      `UPDATE sensor_node
        SET node_name = $1, firmware_version = $2
        WHERE node_id = $3
        RETURNING *`,
@@ -406,7 +437,7 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
       [feedbackResult.rows[0].feedback_id]
     );
 
-    // Optional: Simpan gambar feedback jika ada
+    // optional: Simpan gambar feedback jika ada
     if (image_base64) {
       const dir = path.join(__dirname, "feedback_images");
       if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -601,9 +632,8 @@ app.get("/api/analytics/retrain-status", auth, (req, res) => {
   res.json({ status: retrainStatus, error: retrainError });
 });
 
-// ============================================================
-// HARDWARE ENDPOINTS (INTACT)
-// ============================================================
+  // hardware endpoint
+//
 app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   try {
     const { node_id, amplitude, frequency, duration } = req.body;
@@ -634,7 +664,6 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     if (!node_id || !prediction || confidence === undefined)
       return res.status(400).json({ error: "Missing fields" });
 
-    // Validation
     if (!node_id || !prediction || confidence === undefined) {
       return res.status(400).json({ error: "Missing required fields: node_id, prediction, confidence" });
     }
@@ -673,7 +702,6 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     client.release();
   }
 });
-
 
   // 13. sensor fusion endpoint - vibrate + cam
 
