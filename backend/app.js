@@ -151,28 +151,17 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
     return res.status(403).json({ error: "Access denied." });
 }
 
-    const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
-    if (
-  !farm_name || 
-  !plot_name || 
-  latitude === undefined || latitude === null || 
-  longitude === undefined || longitude === null
-) {
-      return res.status(400).json({
-        error: "Farm name, plot name, latitude, and longitude are required",
-      });
-    }
-    const result = await pool.query(
-      `INSERT INTO farm_plot (farmer_id, farm_name, plot_name, plot_size, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [
-        req.params.farmerId,
-        farm_name,
-        plot_name,
-        plot_size || null,
-        latitude,
-        longitude,
-      ],
-    );
+    const { farm_name, plot_name, plot_size } = req.body;
+
+if (!farm_name || !plot_name) {
+  return res.status(400).json({ error: "Farm name and plot name are required" });
+}
+
+const result = await pool.query(
+  `INSERT INTO farm_plot (farmer_id, farm_name, plot_name, plot_size) 
+   VALUES ($1, $2, $3, $4) RETURNING *`,
+  [req.params.farmerId, farm_name, plot_name, plot_size || null]
+);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: "Failed to create plot" });
@@ -183,7 +172,7 @@ app.post(["/api/farmer/:farmerId/farm-plot", "/api/farmers/:farmerId/plots"], au
 app.patch("/api/plots/:plotId", auth, async (req, res) => {
   try {
     const { plotId } = req.params;
-    const { farm_name, plot_name, plot_size, latitude, longitude } = req.body;
+    const { farm_name, plot_name, plot_size } = req.body;
 
     const plotCheck = await pool.query(
       "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
@@ -199,12 +188,10 @@ app.patch("/api/plots/:plotId", auth, async (req, res) => {
     }
 
     const result = await pool.query(
-      `UPDATE farm_plot 
-       SET farm_name = $1, plot_name = $2, plot_size = $3, latitude = $4, longitude = $5, updated_at = NOW()
-       WHERE plot_id = $6
-       RETURNING *`,
-      [farm_name, plot_name, plot_size || null, latitude, longitude, plotId]
-    );
+  `UPDATE farm_plot SET farm_name = $1, plot_name = $2, plot_size = $3, updated_at = NOW() 
+   WHERE plot_id = $4 RETURNING *`,
+  [farm_name, plot_name, plot_size || null, plotId]
+);
 
     res.json(result.rows[0]);
   } catch (error) {
