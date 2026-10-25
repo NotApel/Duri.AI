@@ -213,6 +213,53 @@ app.patch("/api/plots/:plotId", auth, async (req, res) => {
   }
 });
 
+// Delete farm plot
+app.delete("/api/plots/:plotId", auth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { plotId } = req.params;
+
+    // 1. Check plot milik farmer
+    const plotCheck = await client.query(
+      "SELECT farmer_id FROM farm_plot WHERE plot_id = $1",
+      [plotId]
+    );
+
+    if (plotCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Plot not found" });
+    }
+
+    if (String(plotCheck.rows[0].farmer_id) !== String(req.farmer.id)) {
+      return res.status(403).json({ error: "Access denied." });
+    }
+
+    // 2. Check sama ada plot ada node (elak rosak history)
+    const nodeCheck = await client.query(
+      "SELECT COUNT(*) FROM sensor_node WHERE plot_id = $1",
+      [plotId]
+    );
+
+    if (parseInt(nodeCheck.rows[0].count) > 0) {
+      return res.status(409).json({ 
+        error: "Cannot delete plot. It still has registered sensor nodes." 
+      });
+    }
+
+    // 3. Delete plot
+    await client.query("DELETE FROM farm_plot WHERE plot_id = $1", [plotId]);
+    await client.query("COMMIT");
+
+    res.json({ message: "Plot deleted successfully" });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Delete plot error:", error);
+    res.status(500).json({ error: "Failed to delete plot" });
+  } finally {
+    client.release();
+  }
+});
+
   // 3. sensor node endpoint - table sensornode
 
 // dpt semua maklumat sensor node
@@ -319,6 +366,57 @@ app.patch("/api/nodes/:nodeId", auth, async (req, res) => {
     res.status(500).json({ error: "Failed to update node" });
   }
 });
+
+// Delete sensor node
+app.delete("/api/nodes/:nodeId", auth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { nodeId } = req.params;
+
+    // 1. Check node milik farmer
+    const nodeCheck = await client.query(
+      `SELECT sn.node_id, fp.farmer_id 
+       FROM sensor_node sn 
+       JOIN farm_plot fp ON sn.plot_id = fp.plot_id 
+       WHERE sn.node_id = $1`,
+      [nodeId]
+    );
+
+    if (nodeCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Node not found" });
+    }
+
+    if (String(nodeCheck.rows[0].farmer_id) !== String(req.farmer.id)) {
+      return res.status(403).json({ error: "Access denied." });
+    }
+
+    // 2. Check sama ada node ada reading (elak rosak history)
+    const readingCheck = await client.query(
+      "SELECT COUNT(*) FROM sensor_reading WHERE node_id = $1",
+      [nodeId]
+    );
+
+    if (parseInt(readingCheck.rows[0].count) > 0) {
+      return res.status(409).json({ 
+        error: "Cannot delete node. It has recorded sensor readings." 
+      });
+    }
+
+    // 3. Delete node
+    await client.query("DELETE FROM sensor_node WHERE node_id = $1", [nodeId]);
+    await client.query("COMMIT");
+
+    res.json({ message: "Node deleted successfully" });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Delete node error:", error);
+    res.status(500).json({ error: "Failed to delete node" });
+  } finally {
+    client.release();
+  }
+});
+
   // 4. detection endpoints - table detection
 
 // dpt maklumat detection
@@ -428,7 +526,7 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
         error: "Category is required when marking as false alarm (No Durian)." 
       });
     }
-    
+
     const feedbackResult = await client.query(
       `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
