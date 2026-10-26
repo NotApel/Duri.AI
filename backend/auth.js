@@ -12,11 +12,10 @@ const { promisify } = require("node:util");
 const { readFile } = require("node:fs/promises");
 const path = require("node:path");
 const createAuthMiddleware = require("./middleware/auth");
+const { createPasswordRecovery, passwordError } = require("./passwordRecovery");
 const scrypt = promisify(scryptCallback);
 const publicColumns =
   "farmer_id, full_name, username, email, phone_number, created_at, updated_at";
-const recoveryMessage =
-  "Password recovery is not connected. Please contact your administrator.";
 
 async function migrateAuth(pool) {
   const client = await pool.connect();
@@ -26,6 +25,7 @@ async function migrateAuth(pool) {
     for (const filename of [
       "000_farmer_username.sql",
       "001_auth_sessions.sql",
+      "002_password_reset.sql",
     ]) {
       const sql = await readFile(
         path.join(__dirname, "migrations", filename),
@@ -62,8 +62,8 @@ function registrationError(body) {
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())
   )
     return "Enter a valid email address.";
-  if (body.password.length < 8 || Buffer.byteLength(body.password, "utf8") > 72)
-    return "Password must contain at least 8 characters and at most 72 UTF-8 bytes.";
+  const invalidPassword = passwordError(body.password);
+  if (invalidPassword) return invalidPassword;
   if (
     body.phone_number.trim().length > 20 ||
     !/^[+\d\s()-]+$/.test(body.phone_number.trim()) ||
@@ -125,21 +125,17 @@ function createAuth(
           phone_number.trim(),
         ],
       );
-      return res
-        .status(201)
-        .json({
-          message: "Account created. Please log in.",
-          farmer: result.rows[0],
-        });
+      return res.status(201).json({
+        message: "Account created. Please log in.",
+        farmer: result.rows[0],
+      });
     } catch (err) {
       if (err.code === "23505")
-        return res
-          .status(409)
-          .json({
-            error: /username/.test(err.constraint || "")
-              ? "Username already registered."
-              : "Email already registered.",
-          });
+        return res.status(409).json({
+          error: /username/.test(err.constraint || "")
+            ? "Username already registered."
+            : "Email already registered.",
+        });
       return res
         .status(503)
         .json({ error: "Registration is unavailable. Please try again." });
@@ -157,15 +153,20 @@ function createAuth(
       return res
         .status(400)
         .json({ error: "Enter a valid username and password." });
+    let client;
     try {
-      const result = await pool.query(
-        `SELECT ${publicColumns}, password_hash FROM farmer WHERE lower(username) = lower($1)`,
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT ${publicColumns}, password_hash FROM farmer WHERE lower(username) = lower($1) FOR UPDATE`,
         [username.trim()],
       );
       const farmer = result.rows[0];
       const valid = await verifyPassword(password, farmer?.password_hash);
-      if (!farmer || !valid)
+      if (!farmer || !valid) {
+        await client.query("ROLLBACK");
         return res.status(401).json({ error: "Invalid username or password." });
+      }
       delete farmer.password_hash;
       const token = jwt.sign(
         { id: String(farmer.farmer_id), username: farmer.username },
@@ -180,15 +181,19 @@ function createAuth(
       );
       const tokenHash = createHash("sha256").update(token).digest("hex");
       const expires = new Date(jwt.decode(token).exp * 1000);
-      await pool.query(
+      await client.query(
         "INSERT INTO farmer_session (token_hash, farmer_id, expires_at) VALUES ($1, $2, $3)",
         [tokenHash, farmer.farmer_id, expires],
       );
+      await client.query("COMMIT");
       return res.json({ message: "Login successful", token, farmer });
     } catch {
+      if (client) await client.query("ROLLBACK").catch(() => {});
       return res
         .status(503)
         .json({ error: "Login is unavailable. Please try again." });
+    } finally {
+      client?.release();
     }
   });
   router.get("/session", authenticate, async (req, res) => {
@@ -218,13 +223,7 @@ function createAuth(
         .json({ error: "Logout could not be confirmed. Please try again." });
     }
   });
-  // No OTP is generated, logged or returned until a real recovery delivery path exists.
-  router.post("/forgot-password", (_req, res) =>
-    res.status(503).json({ error: recoveryMessage }),
-  );
-  router.post("/reset-password", (_req, res) =>
-    res.status(503).json({ error: recoveryMessage }),
-  );
+  router.use(createPasswordRecovery(pool));
   return { router, authenticate };
 }
 module.exports = { createAuth, migrateAuth, registrationError, verifyPassword };

@@ -24,11 +24,11 @@ uses username instead of email.
    the browser hostname on port 3000. Frontend and API should use the same hostname.
 5. Register an account, then log in with its username and password.
 
-The existing public home page is `/` (the same sign-in layout). Register and
-login cancellation, Forgot Password, and successful logout use the destinations
-in the supplied use cases. Forgot Password returns home; this change does not
-implement password-reset emails. Register success appears on `/login`; it never
-logs the farmer in automatically. Cancelling logout makes no logout request.
+The existing public home page is `/` (the same sign-in layout). Forgot Password
+opens `/forgot-password`; emailed links open `/reset-password`. See the
+[password recovery setup](../docs/password-recovery.md) for SMTP configuration and
+single-use reset credentials. Register success appears on `/login`; it never logs
+the farmer in automatically. Cancelling logout makes no logout request.
 Failed logout leaves the session and current page active and displays an error.
 
 ## API contract
