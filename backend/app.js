@@ -415,12 +415,16 @@ app.get(["/api/detection", "/api/detections"], auth, async (req, res) => {
        FROM detection d
        JOIN sensor_reading sr ON d.reading_id = sr.reading_id
        JOIN sensor_node sn ON sr.node_id = sn.node_id
+       JOIN farm_plot fp ON sn.plot_id = fp.plot_id
        LEFT JOIN detection_image di ON d.detection_id = di.detection_id
+       WHERE fp.farmer_id = $1
        GROUP BY d.detection_id, sn.node_name
        ORDER BY d.detection_at DESC LIMIT 10`,
+      [req.farmer.id] // <--- Tambah parameter
     );
     res.json(result.rows);
   } catch (error) {
+    console.error("Get detections error:", error);
     res.status(500).json({ error: "Failed to fetch detections" });
   }
 });
@@ -514,6 +518,18 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
       });
     }
 
+    // Check sama ada farmer dah hantar feedback untuk detection ni
+const existingFeedback = await client.query(
+  "SELECT feedback_id FROM detection_feedback WHERE detection_id = $1 AND farmer_id = $2",
+  [detectionId, farmer_id]
+);
+
+if (existingFeedback.rows.length > 0) {
+  return res.status(409).json({ 
+    error: "You have already submitted feedback for this detection." 
+  });
+}
+
     const feedbackResult = await client.query(
       `INSERT INTO detection_feedback (detection_id, farmer_id, category_id, correct_detection, comment_farmer)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -547,6 +563,30 @@ app.post(["/api/detection/:detectionId/detection-feedback", "/api/detections/:de
   }
 }
 );
+
+// Get feedback for a detection (by current farmer)
+app.get("/api/detections/:detectionId/feedback", auth, async (req, res) => {
+  try {
+    const { detectionId } = req.params;
+
+    const result = await pool.query(
+      `SELECT df.*, fc.category_name
+       FROM detection_feedback df
+       LEFT JOIN feedback_category fc ON df.category_id = fc.category_id
+       WHERE df.detection_id = $1 AND df.farmer_id = $2`,
+      [detectionId, req.farmer.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "No feedback found for this detection." });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Get feedback error:", error);
+    res.status(500).json({ error: "Failed to fetch feedback" });
+  }
+});
 
 app.get(
   ["/api/training-queue", "/api/training_queue"],
@@ -605,26 +645,34 @@ app.patch("/api/notifications/:notificationId/read", auth, async (req, res) => {
 
   // 10. analytics endpoint
 
-// dpt analytics stat
+// dpt analytics stat (filter ikut farmer)
 app.get("/api/analytics/stats", auth, async (req, res) => {
   try {
-    const total = await pool.query("SELECT COUNT(*) FROM detection");
-    const verified = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'VERIFIED'",
-    );
-    const rejected = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'REJECTED'",
-    );
-    const pending = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'PENDING'",
-    );
+    // Guna JOIN untuk filter ikut farmer_id
+    const query = `
+      SELECT 
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE d.detection_status = 'VERIFIED') AS verified,
+        COUNT(*) FILTER (WHERE d.detection_status = 'REJECTED') AS rejected,
+        COUNT(*) FILTER (WHERE d.detection_status = 'PENDING') AS pending
+      FROM detection d
+      JOIN sensor_reading sr ON d.reading_id = sr.reading_id
+      JOIN sensor_node sn ON sr.node_id = sn.node_id
+      JOIN farm_plot fp ON sn.plot_id = fp.plot_id
+      WHERE fp.farmer_id = $1
+    `;
+
+    const result = await pool.query(query, [req.farmer.id]);
+    const row = result.rows[0];
+
     res.json({
-      total: parseInt(total.rows[0].count, 10),
-      verified: parseInt(verified.rows[0].count, 10),
-      rejected: parseInt(rejected.rows[0].count, 10),
-      pending: parseInt(pending.rows[0].count, 10),
+      total: parseInt(row.total, 10),
+      verified: parseInt(row.verified, 10),
+      rejected: parseInt(row.rejected, 10),
+      pending: parseInt(row.pending, 10),
     });
   } catch (error) {
+    console.error("Stats error:", error);
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
