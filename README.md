@@ -105,3 +105,10 @@ available APIs; missing write endpoints report an error without claiming a save.
 See the [backend setup and endpoint guide](docs/farm-management-backend-setup.md)
 for VS Code/PostgreSQL configuration, required routes, payloads and ownership rules.
 This feature does not modify backend code or implement real push/device updates.
+
+## Forgot password
+
+The login screen supports email password-reset links. Configure SMTP in the
+backend and follow the [password recovery setup guide](docs/password-recovery.md).
+Links expire after 15 minutes, work once, and invalidate existing login sessions
+after a successful reset. The login layout and existing authentication remain.

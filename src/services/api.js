@@ -119,6 +119,30 @@ export async function loginFarmer(username, password) {
 
 export const registerFarmer = (farmer) => post("/auth/register", farmer);
 
+const recoveryPost = (path, body) =>
+  apiRequest(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
+  });
+export const requestPasswordReset = (email) =>
+  recoveryPost("/auth/forgot-password", { email });
+export async function resetPassword(token, password) {
+  const result = await recoveryPost("/auth/reset-password", {
+    token,
+    new_password: password,
+  });
+  // The backend has revoked the account's sessions. Never auto-login after reset.
+  try {
+    clearCredentials();
+  } catch {
+    /* Expired server sessions remain unusable. */
+  }
+  window.dispatchEvent(new Event("duriai:unauthorized"));
+  return result;
+}
+
 export async function getSession() {
   if (!readToken()) return { farmer: null };
   const response = await apiRequest("/auth/session");

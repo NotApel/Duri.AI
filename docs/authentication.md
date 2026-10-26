@@ -30,7 +30,7 @@ successful login or logout.
    node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
    ```
 
-4. Run `npm run dev` or `npm start` from `backend/`. Startup runs both SQL
+4. Run `npm run dev` or `npm start` from `backend/`. Startup runs all three SQL
    migrations in one transaction **before opening the HTTP listener**. A missing
    secret, unavailable database or migration error prevents startup with an error.
 5. Run `npm run dev` from the repository root. `FRONTEND_ORIGINS` defaults to both
@@ -73,9 +73,9 @@ SELECT farmer_id, username, email FROM farmer ORDER BY farmer_id;
 The original bcrypt hashes and earlier `scrypt$...` hashes both authenticate. Legacy
 plaintext values in `password_hash` are not accepted or silently converted; an
 administrator must arrange a proper password reset for those accounts. Existing
-hashes are untouched by the schema migration. Password recovery endpoints return
-503 with an honest unavailable message until a real delivery flow is implemented.
-They no longer return/log a demo OTP or claim that an email was sent.
+hashes are untouched by the schema migration. Password recovery uses an emailed,
+expiring single-use link when SMTP is configured. It never returns/logs a demo OTP
+or reset credential. See [password recovery setup](password-recovery.md).
 
 New passwords require at least eight characters and at most 72 UTF-8 bytes (bcrypt's
 limit). Invalid login attempts are limited to five per IP per 15 minutes; successful
@@ -91,7 +91,8 @@ architecture; it is not an HttpOnly-cookie implementation.
 | `POST /api/auth/login` with username, password | 200, `{message, token, farmer}` |
 | `GET /api/auth/session` with Bearer JWT | 200, `{farmer}` |
 | `POST /api/auth/logout` with Bearer JWT | 200 after the matching server-side session is deleted |
-| `POST /api/auth/forgot-password` or `/reset-password` | 503 while real recovery delivery is unavailable |
+| `POST /api/auth/forgot-password` | Generic 202 for valid requests; 503 if SMTP recovery is not configured |
+| `POST /api/auth/reset-password` | Reset with an expiring single-use token; revoke existing sessions |
 
 Protected endpoints use the same JWT middleware. Invalid/expired/revoked tokens
 return 401. Database/session-service outages return 503 and do not clear a valid
@@ -110,7 +111,9 @@ conflicts return 409. All auth responses use `Cache-Control: no-store`.
   username collisions; complete rollback on duplicate email; registration
   validation and password hashing; JWT login/session/protected reads; CORS;
   logout revocation; expired/forged/old tokens; earlier bcrypt/scrypt hashes;
-  disabled insecure recovery; and session database failures.
+  unavailable unconfigured recovery; and session database failures. Additional
+  recovery tests cover real local SMTP, expiration/replay, delivery rollback,
+  concurrent resets, old-login races and session revocation.
 - `tests/auth.browser.cjs` uses Playwright against a frontend and backend connected
   to a **disposable test database**. It creates a test account. Set
   `DURI_FRONTEND_URL`, `DURI_API_URL`, and `CHROMIUM_PATH` as needed. Playwright is
@@ -132,3 +135,9 @@ as zero vulnerabilities.
 Authentication does not itself implement per-farmer record ownership. The existing
 resource routes need a separate ownership review before a multi-farmer production
 deployment; the auth repair does not claim that broader authorization is complete.
+
+## Password recovery
+
+See [Forgot password setup](password-recovery.md) for SMTP configuration, the
+additive reset-token migration and recovery testing. Email delivery must be
+configured before the Forgot password flow can send a reset link.
