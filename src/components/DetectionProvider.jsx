@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DetectionContext } from "../services/DetectionContext";
-import { fetchDetections } from "../services/detectionApi";
+import { fetchDetectionPage } from "../services/detectionApi";
 import { readReceipts, writeReceipts } from "../services/feedbackReceipts";
 export default function DetectionProvider({ farmerId, children }) {
   const [result, setResult] = useState({
@@ -8,6 +8,8 @@ export default function DetectionProvider({ farmerId, children }) {
     loading: true,
     error: "",
     loaded: false,
+    nextCursor: null,
+    moreLoading: false,
   });
   const [receipts, setReceipts] = useState(() => {
     try {
@@ -23,11 +25,22 @@ export default function DetectionProvider({ farmerId, children }) {
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
-    setResult((previous) => ({ ...previous, loading: true, error: "" }));
+    setResult((previous) => ({
+      ...previous,
+      loading: true,
+      moreLoading: false,
+      error: "",
+    }));
     try {
-      const events = await fetchDetections({ signal: controller.signal });
+      const page = await fetchDetectionPage({ signal: controller.signal });
       if (!controller.signal.aborted)
-        setResult({ events, loading: false, error: "", loaded: true });
+        setResult({
+          ...page,
+          loading: false,
+          moreLoading: false,
+          error: "",
+          loaded: true,
+        });
     } catch (error) {
       if (!controller.signal.aborted)
         setResult((previous) => ({
@@ -44,6 +57,42 @@ export default function DetectionProvider({ farmerId, children }) {
       active.current?.abort();
     };
   }, [refresh]);
+  const resultRef = useRef(result);
+  resultRef.current = result;
+  async function loadMore() {
+    const current = resultRef.current;
+    if (!current.nextCursor || current.loading || current.moreLoading) return;
+    const controller = new AbortController();
+    active.current?.abort();
+    active.current = controller;
+    setResult((previous) => ({ ...previous, moreLoading: true, error: "" }));
+    try {
+      const page = await fetchDetectionPage({
+        cursor: current.nextCursor,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted)
+        setResult((previous) => {
+          const ids = new Set(previous.events.map((event) => event.id));
+          return {
+            ...previous,
+            events: [
+              ...previous.events,
+              ...page.events.filter((event) => !ids.has(event.id)),
+            ],
+            nextCursor: page.nextCursor,
+            moreLoading: false,
+          };
+        });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setResult((previous) => ({
+          ...previous,
+          moreLoading: false,
+          error: error.message,
+        }));
+    }
+  }
   function recordFeedback(eventId, receipt) {
     const next = { ...receiptsRef.current, [eventId]: receipt };
     receiptsRef.current = next;
@@ -63,7 +112,14 @@ export default function DetectionProvider({ farmerId, children }) {
   }
   return (
     <DetectionContext.Provider
-      value={{ ...result, refresh, receipts, recordFeedback, receiptWarning }}
+      value={{
+        ...result,
+        refresh,
+        loadMore,
+        receipts,
+        recordFeedback,
+        receiptWarning,
+      }}
     >
       {children}
     </DetectionContext.Provider>

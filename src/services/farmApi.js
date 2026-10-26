@@ -48,9 +48,6 @@ export async function saveBackendPlot(farmerId, draft) {
   if (!recordId(farmerId) || (draft.plot_id && !recordId(draft.plot_id)))
     throw new Error("Invalid farmer or plot ID.");
   const payload = plotPayload(draft);
-  // Existing main's create handler checks coordinate truthiness. Preserve valid 0.
-  payload.latitude = String(payload.latitude);
-  payload.longitude = String(payload.longitude);
   const result = await farmRequest(
     draft.plot_id ? `/plots/${draft.plot_id}` : `/farmers/${farmerId}/plots`,
     json(draft.plot_id ? "PATCH" : "POST", payload),
@@ -64,6 +61,7 @@ export async function saveBackendPlot(farmerId, draft) {
 }
 export async function saveBackendNode(draft) {
   const payload = nodePayload(draft);
+  if (typeof draft.is_active === "boolean") payload.is_active = draft.is_active;
   if (!recordId(payload.plot_id) || (draft.node_id && !recordId(draft.node_id)))
     throw new Error("Invalid node or plot ID.");
   const result = await farmRequest(
@@ -94,4 +92,27 @@ export async function markBackendRead(id, farmerId) {
       "The server did not confirm the read state. Refresh before retrying.",
     );
   return notification;
+}
+
+export async function deleteBackendRecord(kind, id) {
+  if (!["plots", "nodes"].includes(kind) || !recordId(id))
+    throw new Error("Invalid record.");
+  return farmRequest(`/${kind}/${id}`, { method: "DELETE" });
+}
+export async function fetchMapNodes(options) {
+  const rows = await farmRequest("/nodes", options);
+  if (!Array.isArray(rows))
+    throw new Error("The server returned an invalid node list.");
+  const ids = new Set();
+  return rows.map((row) => {
+    if (ids.has(String(row.node_id)) || !recordId(row.plot_id))
+      throw new Error("Invalid or duplicate map node.");
+    const [node] = normalizeNodes([row], String(row.plot_id));
+    ids.add(node.node_id);
+    return {
+      ...node,
+      plot_name:
+        typeof row.plot_name === "string" ? row.plot_name : "Unavailable",
+    };
+  });
 }

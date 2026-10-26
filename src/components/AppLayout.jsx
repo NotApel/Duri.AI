@@ -63,8 +63,13 @@ export default function AppLayout() {
           const data = await apiRequest("/analytics/retrain-status");
           if (data.status === "success") {
             localStorage.removeItem("isRetraining");
-            setGlobalToast("AI Retraining Complete! The model is now smarter.");
+            setGlobalToast(
+              "Training script finished. Model evaluation and device deployment remain unverified.",
+            );
             setTimeout(() => setGlobalToast(""), 7000);
+          } else if (data.status === "idle") {
+            localStorage.removeItem("isRetraining");
+            localStorage.removeItem("retrainStartTime");
           } else if (data.status === "failed") {
             localStorage.removeItem("isRetraining");
             setGlobalToast(
@@ -72,7 +77,7 @@ export default function AppLayout() {
             );
             setTimeout(() => setGlobalToast(""), 7000);
           }
-        } catch (err) {
+        } catch {
           // Ignore network errors during poll
         }
       }

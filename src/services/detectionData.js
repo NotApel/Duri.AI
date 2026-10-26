@@ -1,3 +1,4 @@
+import { nodeLocation } from "./nodeLocation.js";
 const idPattern = /^[1-9]\d*$/;
 export function recordId(value) {
   const id = String(value ?? "");
@@ -39,6 +40,15 @@ export function normalizeDetections(rows) {
     ids.add(id);
     return {
       id,
+      nodeId: recordId(row.node_id),
+      plotId: recordId(row.plot_id),
+      location: nodeLocation(row.node_latitude, row.node_longitude),
+      locationRecordedAt:
+        typeof row.location_recorded_at === "string" &&
+        Number.isFinite(Date.parse(row.location_recorded_at))
+          ? row.location_recorded_at
+          : null,
+      feedback: normalizeFeedback(row.farmer_feedback, row.detection_at),
       node:
         typeof row.node_name === "string" && row.node_name.trim()
           ? row.node_name
@@ -63,6 +73,24 @@ export function normalizeDetections(rows) {
       images: Array.isArray(row.images) ? row.images : null,
     };
   });
+}
+function normalizeFeedback(row, eventTime) {
+  if (
+    !row ||
+    !recordId(row.feedback_id) ||
+    typeof row.correct_detection !== "boolean" ||
+    !Number.isFinite(Date.parse(row.feedback_at))
+  )
+    return null;
+  return {
+    feedbackId: String(row.feedback_id),
+    label: row.correct_detection ? "DURIAN" : "NOT_DURIAN",
+    categoryId: recordId(row.category_id),
+    category: row.category_name || "No category supplied",
+    comment: typeof row.comment_farmer === "string" ? row.comment_farmer : "",
+    savedAt: row.feedback_at,
+    eventTime,
+  };
 }
 export function detectionType(event) {
   return (
@@ -96,18 +124,22 @@ export function feedbackPayload({ farmerId, label, categoryId, comment }) {
     throw new Error("Please log in again before submitting feedback.");
   if (!["DURIAN", "NOT_DURIAN"].includes(label))
     throw new Error("Choose Durian or No Durian.");
-  if (!recordId(categoryId)) throw new Error("Choose a feedback category.");
-  if (typeof comment !== "string" || !comment.trim() || comment.length > 500)
-    throw new Error(
-      "Enter a comment of 1–500 characters explaining your classification.",
-    );
+  const hasCategory =
+    categoryId !== undefined && categoryId !== null && categoryId !== "";
+  if (
+    (label === "NOT_DURIAN" && !hasCategory) ||
+    (hasCategory && !recordId(categoryId))
+  )
+    throw new Error("Choose an available feedback category for No Durian.");
+  if (typeof comment !== "string" || comment.length > 500)
+    throw new Error("Comments can contain up to 500 characters.");
   // The active main endpoint maps true → VERIFIED, false → REJECTED. This
   // legacy field represents the farmer's class, not agreement with a prediction.
   return {
     farmer_id: String(farmerId),
-    category_id: String(categoryId),
+    category_id: hasCategory ? String(categoryId) : null,
     correct_detection: label === "DURIAN",
-    comment_farmer: comment.trim(),
+    comment_farmer: comment.trim() || null,
   };
 }
 export function csvCell(value) {

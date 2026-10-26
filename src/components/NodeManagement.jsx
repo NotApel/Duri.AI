@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useFarm } from "../services/FarmContext";
 import { useFarmList } from "../services/useFarmList";
-import { saveBackendNode } from "../services/farmApi";
+import { saveBackendNode, deleteBackendRecord } from "../services/farmApi";
 import { farmDate } from "../services/farmData";
 import { FarmPlotPicker, FarmListState } from "./FarmControls";
 export default function NodeManagement() {
@@ -75,6 +75,58 @@ export default function NodeManagement() {
         "Node configuration saved by the backend. This does not install firmware or confirm device connectivity.",
       );
       backend.refresh();
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      pending.current = false;
+      setSaving(false);
+    }
+  }
+  async function changeNode(remove = false) {
+    if (pending.current || unavailable) return;
+    if (
+      remove &&
+      !window.confirm(
+        `Delete node “${selected.node_name}”? Nodes with sensor history cannot be deleted.`,
+      )
+    )
+      return;
+    setError("");
+    setMessage("");
+    if (mode === "simulation") {
+      const action = remove
+        ? { type: "deleteNode", id: selected.node_id }
+        : {
+            type: "active",
+            id: selected.node_id,
+            is_active: selected.is_active === false,
+          };
+      if (dispatch(action)) {
+        if (remove) setSelectedId("");
+        setMessage(
+          remove
+            ? "Simulated node deleted."
+            : "Simulated node availability updated.",
+        );
+      }
+      return;
+    }
+    pending.current = true;
+    setSaving(true);
+    try {
+      if (remove) await deleteBackendRecord("nodes", selected.node_id);
+      else
+        await saveBackendNode({
+          ...selected,
+          is_active: selected.is_active === false,
+        });
+      if (remove) setSelectedId("");
+      backend.refresh();
+      setMessage(
+        remove
+          ? "Node deleted by the backend."
+          : "Node availability updated. Connectivity still depends on device heartbeats.",
+      );
     } catch (error) {
       setError(error.message);
     } finally {
@@ -193,7 +245,7 @@ export default function NodeManagement() {
                     </button>
                   </td>
                   <td>
-                    {node.status}
+                    {node.is_active === false ? "Disabled" : node.status}
                     {mode === "simulation" ? " · simulated" : ""}
                   </td>
                   <td>
@@ -271,7 +323,7 @@ export default function NodeManagement() {
             <p className="ui-muted">
               Registration records configuration only. New simulation nodes
               start OFFLINE with battery and heartbeat unavailable. Nodes with
-              event history cannot be reassigned in this simulation.
+              sensor or event history cannot be reassigned.
             </p>
             <div className="ui-actions">
               <button
@@ -313,7 +365,9 @@ export default function NodeManagement() {
                     ? " · simulated"
                     : " · backend reported"}
                 </dt>
-                <dd>{selected.status}</dd>
+                <dd>
+                  {selected.is_active === false ? "Disabled" : selected.status}
+                </dd>
               </div>
               <div>
                 <dt>Last heartbeat · MYT</dt>
@@ -323,15 +377,30 @@ export default function NodeManagement() {
             <div className="ui-actions">
               <button
                 className="ui-button"
-                disabled={unavailable}
+                disabled={saving || unavailable}
                 onClick={() => edit(selected)}
               >
                 Edit / reassign node
+              </button>
+              <button
+                className="ui-button"
+                disabled={saving || unavailable}
+                onClick={() => changeNode()}
+              >
+                {selected.is_active === false ? "Enable node" : "Disable node"}
+              </button>
+              <button
+                className="ui-button"
+                disabled={saving || unavailable}
+                onClick={() => changeNode(true)}
+              >
+                Delete node
               </button>
               {mode === "simulation" && (
                 <>
                   <button
                     className="ui-button"
+                    disabled={selected.is_active === false}
                     onClick={() =>
                       simulate(
                         "connection",
@@ -344,6 +413,7 @@ export default function NodeManagement() {
                   </button>
                   <button
                     className="ui-button"
+                    disabled={selected.is_active === false}
                     onClick={() => simulate("candidate")}
                   >
                     Simulate candidate event

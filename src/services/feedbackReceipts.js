@@ -12,7 +12,8 @@ export function readReceipts(farmerId, storage) {
           record &&
           ["DURIAN", "NOT_DURIAN"].includes(record.label) &&
           recordId(record.feedbackId) &&
-          recordId(record.categoryId) &&
+          (recordId(record.categoryId) ||
+            (record.label === "DURIAN" && record.categoryId === null)) &&
           Number.isFinite(Date.parse(record.eventTime)) &&
           typeof record.comment === "string" &&
           typeof record.category === "string" &&

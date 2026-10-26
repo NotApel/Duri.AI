@@ -46,19 +46,13 @@ function candidate(state = savedNode()) {
     now: "2026-10-23T09:00:00Z",
   });
 }
-test("plot boundaries accept zero coordinates and reject missing, invalid and out-of-range data", () => {
+test("plot creation needs no farmer-entered coordinates and validates names and size", () => {
   assert.deepEqual(plotPayload(plot), {
     farm_name: "Test farm",
     plot_name: "East",
     plot_size: 2.5,
-    latitude: 0,
-    longitude: 101.5,
   });
   for (const changed of [
-    { latitude: "" },
-    { longitude: null },
-    { latitude: 91 },
-    { longitude: -181 },
     { plot_size: 0 },
     { plot_size: 1000000 },
     { plot_size: true },
@@ -239,4 +233,30 @@ test("notification lists omit other farmers and preserve unread versus read with
   assert.throws(() =>
     normalizeNotifications([{ ...own, is_read: "false" }], "42"),
   );
+});
+
+test("deletion preserves simulation history and disabling never fabricates connectivity", () => {
+  const empty = savedNode();
+  assert.throws(
+    () => updateFarm(empty, { type: "deletePlot", id: p1 }),
+    /nodes/,
+  );
+  const removed = updateFarm(empty, { type: "deleteNode", id: n1 });
+  assert.equal(
+    updateFarm(removed, { type: "deletePlot", id: p1 }).plots.length,
+    0,
+  );
+  assert.throws(
+    () => updateFarm(candidate(), { type: "deleteNode", id: n1 }),
+    /history/,
+  );
+  const disabled = updateFarm(candidate(), {
+    type: "active",
+    id: n1,
+    is_active: false,
+  });
+  assert.equal(disabled.nodes[0].status, "OFFLINE");
+  assert.equal(disabled.nodes[0].is_active, false);
+  assert.throws(() => candidate(disabled));
+  assert.equal(validateFarm(disabled), disabled);
 });

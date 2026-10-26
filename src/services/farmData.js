@@ -31,8 +31,6 @@ export function plotPayload(draft) {
     farm_name: text(draft.farm_name, "Farm name", 200),
     plot_name: text(draft.plot_name, "Plot name", 200),
     plot_size: size,
-    latitude: coordinate(draft.latitude, 90, "latitude"),
-    longitude: coordinate(draft.longitude, 180, "longitude"),
   };
 }
 export function nodePayload(draft) {
@@ -91,6 +89,14 @@ export function normalizeNodes(rows, plotId) {
       node_name: text(row.node_name, "Node name", 50),
       firmware_version:
         typeof row.firmware_version === "string" ? row.firmware_version : null,
+      is_active: row.is_active !== false,
+      latitude: optionalCoordinate(row.latitude, 90),
+      longitude: optionalCoordinate(row.longitude, 180),
+      location_recorded_at:
+        typeof row.location_recorded_at === "string" &&
+        Number.isFinite(Date.parse(row.location_recorded_at))
+          ? row.location_recorded_at
+          : null,
       status: ["ONLINE", "OFFLINE"].includes(row.status)
         ? row.status
         : "UNKNOWN",

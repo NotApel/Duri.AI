@@ -9,6 +9,10 @@ CREATE TABLE SENSOR_NODE (
         CHECK (battery_level BETWEEN 0 AND 100),
     firmware_version VARCHAR(20),
     last_ping_at TIMESTAMPTZ,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    latitude DECIMAL(9,6) CHECK (latitude BETWEEN -90 AND 90),
+    longitude DECIMAL(9,6) CHECK (longitude BETWEEN -180 AND 180),
+    location_recorded_at TIMESTAMPTZ,
     installed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_farm_plot_sensor_node

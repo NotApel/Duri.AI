@@ -142,17 +142,31 @@ async function main() {
     if (pathname === "/auth/logout")
       return reply(200, { message: "Logged out" });
     if (pathname === "/detections")
-      return reply(200, [
-        {
-          detection_id: "101",
-          detection_at: "2026-10-23T09:00:00Z",
-          detection_status: "PENDING",
-          prediction: "DURIAN",
-          confidence: "80",
-          node_name: "API node",
-          images: [],
-        },
-      ]);
+      return reply(200, {
+        items: [
+          {
+            detection_id: "101",
+            detection_at: "2026-10-23T09:00:00Z",
+            detection_status: "PENDING",
+            prediction: "DURIAN",
+            confidence: "80",
+            node_name: "API node",
+            images: [],
+          },
+        ],
+        next_cursor: null,
+      });
+    if (pathname === "/detections/101")
+      return reply(200, {
+        detection_id: "101",
+        detection_at: "2026-10-23T09:00:00Z",
+        detection_status: "PENDING",
+        prediction: "DURIAN",
+        confidence: "80",
+        node_name: "API node",
+        images: [],
+      });
+    if (pathname === "/nodes") return reply(200, nodes);
     if (pathname === "/feedback-categories")
       return reply(200, [{ category_id: "27", category_name: "Other" }]);
     if (pathname === `/farmers/${farmerId}/plots` && method === "GET")
@@ -232,8 +246,6 @@ async function main() {
       ["Farm name", "Test farm"],
       ["Plot name", name],
       ["Plot size (hectares)", "2.5"],
-      ["Latitude", "0"],
-      ["Longitude", "101.5"],
     ])
       await page.getByLabel(label, { exact: true }).fill(value);
   }
@@ -415,7 +427,8 @@ async function main() {
   const create = requests.find(
     (r) => r.method === "POST" && r.path === "/farmers/42/plots",
   );
-  assert.equal(create.body.latitude, "0");
+  assert.equal(create.body.latitude, undefined);
+  assert.equal(create.body.longitude, undefined);
   assert.equal(create.authorization, "Bearer browser-test-token-42");
   await goto("/nodes");
   await page.getByLabel("Selected farm plot").selectOption("7");

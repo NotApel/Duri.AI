@@ -49,7 +49,7 @@ export default function FarmManagement({ page }) {
         <p className="ui-notice">
           {mode === "simulation"
             ? "Simulation · saved only in this browser for your account. No hardware is contacted. Regular detections and Harvest Logs remain on backend data."
-            : "Backend records · changes save only after server confirmation. Some management operations still need backend support; unavailable operations retain your edits and report an error."}
+            : "Backend records · changes save after server confirmation. Node connection, battery and locations come from device reports."}
         </p>
         {mode === "simulation" && (
           <button

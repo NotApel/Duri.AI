@@ -59,7 +59,7 @@ export default function DashboardHome() {
         const [detections, stats, nodes] = await Promise.all([
           read("detections"),
           read("analytics/stats"),
-          read("plots/1/nodes"),
+          read("nodes"),
         ]);
 
         if (
@@ -156,7 +156,7 @@ export default function DashboardHome() {
               <dd>{data.stats.verified ?? "Unavailable"}</dd>
             </div>
             <div>
-              <dt>Online nodes · Plot 1</dt>
+              <dt>Online nodes · your plots</dt>
               <dd>
                 {data.nodes.filter((node) => node.status === "ONLINE").length} /{" "}
                 {data.nodes.length}
@@ -183,7 +183,7 @@ export default function DashboardHome() {
             {/* === END NEW ADDITION === */}
           </dl>
           <div className="ui-page-header">
-            <h2>Sensor nodes · Plot 1</h2>
+            <h2>Sensor nodes · your plots</h2>
             <label className="ui-field" htmlFor="node-search">
               Search nodes
               <input
@@ -238,7 +238,7 @@ export default function DashboardHome() {
           <p className="ui-muted">
             {mode === "simulation"
               ? "Sample readings only. These nodes and events are not connected to real hardware."
-              : "Recent events refer to the latest ten records returned by the API. Orchard area and harvest weight are unavailable."}
+              : "Recent events refer to the latest 20 records returned by the API. Orchard area and harvest weight are unavailable."}
           </p>
         </>
       )}
@@ -274,10 +274,7 @@ export default function DashboardHome() {
                             : "Awaiting verification")}
                       </td>
                       <td>
-                        <Link
-                          className="ui-text-link"
-                          to="/map"
-                        >
+                        <Link className="ui-text-link" to="/map">
                           Open backend detections
                         </Link>
                       </td>

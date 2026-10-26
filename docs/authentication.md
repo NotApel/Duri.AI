@@ -141,3 +141,7 @@ deployment; the auth repair does not claim that broader authorization is complet
 See [Forgot password setup](password-recovery.md) for SMTP configuration, the
 additive reset-token migration and recovery testing. Email delivery must be
 configured before the Forgot password flow can send a reset link.
+
+Farm schema migration and updated management/detection contracts are documented in
+[the farm management setup guide](farm-management-backend-setup.md). Startup also
+applies `003_farm_locations.sql` without resetting existing records.

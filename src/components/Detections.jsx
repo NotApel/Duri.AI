@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
 import DetectionDetails from "./DetectionDetails";
+import { useDetectionRecord } from "../services/useDetectionRecord";
 import { useDetections } from "../services/DetectionContext";
 import "./Detections.css";
 
@@ -38,11 +39,17 @@ export default function Detections({ mode = "map" }) {
     recordFeedback,
     receiptWarning,
     loaded,
+    nextCursor,
+    loadMore,
+    moreLoading,
   } = useDetections();
+  const direct = useDetectionRecord(eventId);
   const records = Object.fromEntries(
     events
-      .filter((item) => receipts[item.id]?.eventTime === item.time)
-      .map((item) => [item.id, receipts[item.id]]),
+      .filter(
+        (item) => item.feedback || receipts[item.id]?.eventTime === item.time,
+      )
+      .map((item) => [item.id, item.feedback || receipts[item.id]]),
   );
   const [online, setOnline] = useState(navigator.onLine);
   const [view, setView] = useState(mode === "history" ? "all" : "needs");
@@ -64,7 +71,7 @@ export default function Detections({ mode = "map" }) {
   useEffect(() => {
     heading.current?.focus();
   }, [eventId]);
-  const event = events.find((item) => item.id === eventId);
+  const event = direct.event;
   const filtered = events.filter(
     (item) =>
       (view === "all" ||
@@ -108,6 +115,12 @@ export default function Detections({ mode = "map" }) {
           </h2>
         </div>
       </header>
+      {eventId && direct.error && event && (
+        <p className="d-error" role="alert">
+          {direct.error} Displayed details may be stale.{" "}
+          <button onClick={direct.refresh}>Refresh event</button>
+        </p>
+      )}
       {receiptWarning && (
         <p className="d-notice" role="status">
           {receiptWarning}
@@ -124,11 +137,22 @@ export default function Detections({ mode = "map" }) {
           Refreshing backend records…
         </p>
       )}
-      {loading && !loaded ? (
+      {eventId && direct.loading && !event ? (
+        <p role="status" className="d-empty">
+          Loading detection details…
+        </p>
+      ) : eventId && direct.error && !event ? (
+        <div className="d-empty" role="alert">
+          <h2>Event unavailable</h2>
+          <p>{direct.error}</p>
+          <button onClick={direct.refresh}>Try again</button>
+          <Link to="/analytics">Return to Harvest Logs</Link>
+        </div>
+      ) : !eventId && loading && !loaded ? (
         <p className="d-empty" role="status">
           Loading backend detections…
         </p>
-      ) : loadError && !loaded ? (
+      ) : !eventId && loadError && !loaded ? (
         <div className="d-empty" role="alert">
           <h2>Unable to load detections</h2>
           <p>{loadError}</p>
@@ -141,20 +165,28 @@ export default function Detections({ mode = "map" }) {
           <DetectionDetails
             key={event.id}
             event={event}
-            receipt={records[event.id]}
-            onSave={recordFeedback}
+            receipt={
+              event.feedback ||
+              (receipts[event.id]?.eventTime === event.time
+                ? receipts[event.id]
+                : null)
+            }
+            onSave={(id, receipt) => {
+              recordFeedback(id, receipt);
+              direct.refresh();
+            }}
             online={online}
-            available={!loading && !loadError}
+            available={!direct.loading && !direct.error}
             StatusBadge={Badge}
           />
         ) : (
           <div className="d-empty">
             <h2>Event unavailable</h2>
             <p>
-              This event is not among the latest records returned by the
-              backend. Refresh or return to Harvest Logs.
+              The event could not be loaded. Try again or return to Harvest
+              Logs.
             </p>
-            <button onClick={load}>Refresh events</button>
+            <button onClick={direct.refresh}>Refresh event</button>
             <Link to={basePath}>
               Return to {mode === "history" ? "harvest logs" : "orchard map"}
             </Link>
@@ -274,7 +306,10 @@ export default function Detections({ mode = "map" }) {
                         ? "Farmer assessment: Durian"
                         : "Farmer assessment: No Durian"
                       : "Awaiting farmer review"}{" "}
-                    · Location unavailable
+                    ·{" "}
+                    {item.location
+                      ? "Node location available"
+                      : "Location unavailable"}
                   </p>
                 </div>
                 <ArrowUpRight
@@ -284,12 +319,24 @@ export default function Detections({ mode = "map" }) {
               </Link>
             ))}
           </div>
+          {nextCursor && (
+            <button
+              className="ui-button"
+              disabled={loading || moreLoading}
+              onClick={loadMore}
+            >
+              {moreLoading ? "Loading older events…" : "Load older events"}
+            </button>
+          )}
+          <p className="d-caption">
+            Filters apply to the loaded events. Harvest Logs searches detection
+            types across the full history.
+          </p>
           {!filtered.length && (
             <div className="d-empty">
               <h2>No events in this view</h2>
               <p>
-                Try another filter or open Harvest Logs. The API currently
-                returns up to ten recent records.
+                Try another filter, load older events, or open Harvest Logs.
               </p>
               <button
                 onClick={() => {
