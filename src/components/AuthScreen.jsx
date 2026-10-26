@@ -196,7 +196,7 @@ export default function AuthScreen() {
               <button
                 disabled={loading}
                 onClick={() => {
-                  navigate("/", { replace: true });
+                  navigate("/forgot-password");
                 }}
               >
                 Forgot password?

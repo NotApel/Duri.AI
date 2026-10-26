@@ -13,6 +13,7 @@ import {
   Link,
 } from "react-router-dom";
 import AuthScreen from "./components/AuthScreen";
+import PasswordRecovery from "./components/PasswordRecovery";
 import DetectionProvider from "./components/DetectionProvider";
 import FarmProvider from "./components/FarmProvider";
 import FarmManagement from "./components/FarmManagement";
@@ -85,6 +86,14 @@ function App() {
           <Route path="/" element={<AuthWrapper />} />
           <Route path="/login" element={<AuthWrapper />} />
           <Route path="/register" element={<AuthWrapper />} />
+          <Route
+            path="/forgot-password"
+            element={<PasswordRecovery key="forgot" mode="forgot" />}
+          />
+          <Route
+            path="/reset-password"
+            element={<PasswordRecovery key="reset" mode="reset" />}
+          />
 
           {/* App routes with sidebar */}
           <Route element={<ProtectedApp />}>

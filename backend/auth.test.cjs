@@ -96,6 +96,9 @@ before(async () => {
       DB_NAME: name,
       PORT: String(port),
       JWT_SECRET: secret,
+      SMTP_HOST: "",
+      SMTP_FROM: "",
+      FRONTEND_URL: "",
       DEVICE_API_KEY: "test-device-only",
       FRONTEND_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173",
     },
@@ -356,7 +359,10 @@ test("password recovery cannot disclose an OTP or modify a password without real
       otp: "123456",
       new_password: "attacker-password",
     });
-    assert.equal(result.response.status, 503);
+    assert.equal(
+      result.response.status,
+      endpoint.endsWith("forgot-password") ? 503 : 400,
+    );
     assert.equal(result.body.demo_otp, undefined);
   }
   await login();
