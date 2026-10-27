@@ -93,11 +93,19 @@ export default function TrainingHistory() {
     try {
       await retrain();
     } catch (err) {
+      setRetraining(false);
+      localStorage.removeItem("isRetraining");
+
+      // NEW: Handle professional warnings
       if (err.message.includes("already in progress")) {
-        // Ignore
+        alert(
+          "⏳ The AI is currently learning from your feedback. Please wait for it to finish.",
+        );
+      } else if (err.message.includes("limit reached")) {
+        alert(
+          "⚠️ You have reached the limit for manual retraining today. The AI will automatically learn this Sunday.",
+        );
       } else {
-        setRetraining(false);
-        localStorage.removeItem("isRetraining");
         alert(`Retraining failed to start: ${err.message}`);
       }
     }
@@ -140,7 +148,7 @@ export default function TrainingHistory() {
             display: "flex",
             flexDirection: "column",
             alignItems: "flex-end",
-            width: "260px",
+            width: "280px",
           }}
         >
           <button
@@ -154,8 +162,24 @@ export default function TrainingHistory() {
               className={retraining ? "animate-spin" : ""}
               style={{ marginRight: "8px" }}
             />
-            {retraining ? "Retraining AI..." : "Retrain AI Now"}
+            {retraining ? "Retraining AI..." : "Force Retrain Now"}
           </button>
+
+          {/* NEW: Professional text explaining the hybrid system */}
+          {!retraining && (
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#64748b",
+                marginTop: "6px",
+                textAlign: "right",
+                lineHeight: "1.4",
+              }}
+            >
+              The AI automatically retrains <b>every Sunday</b>. <br />
+              Click to force an immediate update.
+            </p>
+          )}
 
           {retraining && (
             <div style={{ marginTop: "12px", width: "100%" }}>
