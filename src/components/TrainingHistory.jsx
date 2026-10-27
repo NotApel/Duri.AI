@@ -79,6 +79,22 @@ export default function TrainingHistory() {
         localStorage.setItem("isRetraining", "true");
       } catch {
         /* Server state remains authoritative. */
+      await retrain();
+    } catch (err) {
+      setRetraining(false);
+      localStorage.removeItem("isRetraining");
+
+      // NEW: Handle professional warnings
+      if (err.message.includes("already in progress")) {
+        alert(
+          "⏳ The AI is currently learning from your feedback. Please wait for it to finish.",
+        );
+      } else if (err.message.includes("limit reached")) {
+        alert(
+          "⚠️ You have reached the limit for manual retraining today. The AI will automatically learn this Sunday.",
+        );
+      } else {
+        alert(`Retraining failed to start: ${err.message}`);
       }
       await loadStats();
     } catch (error) {
@@ -110,6 +126,15 @@ export default function TrainingHistory() {
           <button className="ui-button" onClick={loadStats}>
             Refresh training status
           </button>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            width: "280px",
+          }}
+        >
           <button
             className="ui-button primary"
             onClick={handleRetrain}
@@ -124,6 +149,75 @@ export default function TrainingHistory() {
                 ? "Training script running…"
                 : "Retrain AI Now"}
           </button>
+            <RefreshCw
+              size={18}
+              className={retraining ? "animate-spin" : ""}
+              style={{ marginRight: "8px" }}
+            />
+            {retraining ? "Retraining AI..." : "Force Retrain Now"}
+          </button>
+
+          {/* NEW: Professional text explaining the hybrid system */}
+          {!retraining && (
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#64748b",
+                marginTop: "6px",
+                textAlign: "right",
+                lineHeight: "1.4",
+              }}
+            >
+              The AI automatically retrains <b>every Sunday</b>. <br />
+              Click to force an immediate update.
+            </p>
+          )}
+
+          {retraining && (
+            <div style={{ marginTop: "12px", width: "100%" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "12px",
+                  color: "#37583a",
+                  marginBottom: "4px",
+                }}
+              >
+                <span>
+                  <Clock
+                    size={12}
+                    style={{ display: "inline", marginRight: "4px" }}
+                  />{" "}
+                  {formatTime(elapsedTime)}
+                </span>
+
+                <span>
+                  {remainingSeconds === 0
+                    ? "Finishing up..."
+                    : `Est. ${formatTime(remainingSeconds)} left`}
+                </span>
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "6px",
+                  background: "#e2e8f0",
+                  borderRadius: "3px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${progressPercent}%`,
+                    height: "100%",
+                    background: "#37583a",
+                    transition: "width 1s linear",
+                  }}
+                ></div>
+              </div>
+            </div>
+          )}
         </div>
       </header>
       {error && (
