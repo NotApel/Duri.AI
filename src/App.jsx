@@ -34,12 +34,20 @@ function AuthWrapper() {
   const { farmer } = useContext(AuthContext);
   const location = useLocation();
   return farmer ? (
-    <Navigate to="/dashboard" replace />
+    <Navigate
+      to={
+        /^\/map\/events\/[1-9]\d*$/.test(location.state?.from || "")
+          ? location.state.from
+          : "/dashboard"
+      }
+      replace
+    />
   ) : (
     <AuthScreen key={location.key} />
   );
 }
 function ProtectedApp() {
+  const location = useLocation();
   const { farmer, signedOut, checking, sessionError, refresh } =
     useContext(AuthContext);
   if (checking)
@@ -73,7 +81,11 @@ function ProtectedApp() {
       </FarmProvider>
     </DetectionProvider>
   ) : (
-    <Navigate to={signedOut ? "/" : "/login"} replace />
+    <Navigate
+      to={signedOut ? "/" : "/login"}
+      replace
+      state={{ from: location.pathname }}
+    />
   );
 }
 

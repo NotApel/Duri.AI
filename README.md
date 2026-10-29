@@ -2,77 +2,46 @@
 
 An AI-powered IoT-based durian harvest monitoring system that combines sensor fusion, edge AI, and a Progressive Web App (PWA) to accurately detect fallen durians, reduce false alarms, and provide real-time harvest notifications.
 
-## 🚀 Features
+## Features and integration status
 
-- 🍈 AI-powered durian detection using TensorFlow Lite
-- 📡 Sensor fusion to minimize false alarms
-- 📱 Progressive Web App (PWA) with offline support
-- 🔔 Real-time push notifications with GPS location and image preview
-- 🧠 Self-learning feedback system for continuous AI improvement
-- 📊 Harvest analytics and reporting dashboard
-- 🌐 OTA (Over-the-Air) model updates
-- ⚙️ Sensor node and farm plot management
+- Farmer registration, login/logout and email password recovery.
+- Farm plot/node management, Orchard Map, Harvest Logs, image viewing and feedback.
+- Authenticated Raspberry Pi event ingestion with persistent retry protection.
+- Private Supabase image uploads and owner-checked signed image URLs.
+- In-app notifications and session-scoped Web Push subscriptions.
+- Installable PWA with a cached public application shell. Private records still
+  require connectivity; offline editing/synchronization is not implemented.
+- Clearly labelled browser and Raspberry Pi integration simulations.
 
-## 🛠️ Tech Stack
+Physical sensing/inference, cloud provider delivery and model evaluation/deployment
+must be verified in staging. Retraining can run a configured external script, but
+script completion does not prove improved accuracy or successful OTA deployment.
 
-### Hardware
-- Raspberry Pi 5
-- ESP32
-- Camera Module
-- Vibration Sensor
+## Technology stack
 
-### Software
-- TensorFlow Lite
-- Progressive Web App (PWA)
-- Service Workers
-- Push Notifications
-- REST API
-- Cloud Database
+- **Hardware target:** ESP32 sensors and Raspberry Pi 4 processing/camera inference.
+- **Frontend:** React, Vite, React Router, Tailwind/CSS, Leaflet and service workers.
+- **Backend:** Node.js/Express, `pg`, SQL migrations, JWT sessions, Nodemailer and
+  `web-push`. Existing training scheduling uses `node-cron`.
+- **Hosting:** Railway backend, Supabase PostgreSQL/private Storage, Vercel frontend.
 
-## 🏗️ System Architecture
+## System architecture
 
-```
-Sensor Node
-├── Camera
-├── Vibration Sensor
-└── Raspberry Pi 5 (Edge AI)
-        │
-        ▼
-ESP32 Hub
-        │
-      4G Network
-        │
-        ▼
-Cloud Server
-        │
-        ▼
-Progressive Web App
+```text
+ESP32 sensors → Raspberry Pi 4 processing → Node.js REST API on Railway
+                                            ├─ Supabase PostgreSQL
+                                            ├─ Supabase private Storage
+                                            └─ Web Push providers → farmer browser
+                                                        ↕
+                                                React PWA on Vercel
 ```
 
-## 📸 Key Features
-
-- AI image verification
-- Dual-sensor confirmation
-- GPS-based harvest location
-- Image preview in notifications
-- Offline capability
-- Interactive orchard map
-- Self-learning feedback loop
-
-## 🧪 Testing
-
-- Unit Testing
-- Integration Testing
-- System Testing
-- Functional Testing
-- Regression Testing
-- Performance Testing
-- Reliability Testing
+The legacy ESP32 sketch under `Duri (1)/` is retained as a simulation example;
+it is not proof that the new Raspberry Pi processing pipeline is connected.
 
 ## 📄 License
 
 This project is developed as a Final Year Project (FYP) at the German-Malaysian Institute (GMI).
-
 
 ## Authentication and existing databases
 
@@ -112,3 +81,10 @@ The login screen supports email password-reset links. Configure SMTP in the
 backend and follow the [password recovery setup guide](docs/password-recovery.md).
 Links expire after 15 minutes, work once, and invalidate existing login sessions
 after a successful reset. The login layout and existing authentication remain.
+
+## Cloud event and notification integration
+
+ESP32 → Raspberry Pi 4 → Node.js on Railway → Supabase PostgreSQL/private Storage
+→ Vercel PWA. See [cloud deployment and Web Push](docs/cloud-deployment.md) and
+[Pi event contract, provisioning and simulation](docs/raspberry-pi-events.md).
+Existing login, farm management, logs and feedback remain in the current app.

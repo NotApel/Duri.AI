@@ -22,7 +22,9 @@ successful login or logout.
    with `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and `JWT_SECRET`
    in its existing local `backend/.env`, or in process environment variables.
    The variable names and safe placeholders are in `backend/.env.example`.
-   `DATABASE_URL` alone is not used by this backend.
+   Alternatively, configure `DATABASE_URL`; it takes precedence over `DB_*`.
+   Supabase and production require `DB_SSL=true` with certificate verification.
+   See [cloud deployment](cloud-deployment.md) for hosted configuration.
 3. Generate a unique JWT secret. For example, run this locally and put the result
    in `JWT_SECRET`; do not commit the result:
 
@@ -30,7 +32,7 @@ successful login or logout.
    node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
    ```
 
-4. Run `npm run dev` or `npm start` from `backend/`. Startup runs all three SQL
+4. Run `npm run dev` or `npm start` from `backend/`. Startup runs the repeatable SQL
    migrations in one transaction **before opening the HTTP listener**. A missing
    secret, unavailable database or migration error prevents startup with an error.
 5. Run `npm run dev` from the repository root. `FRONTEND_ORIGINS` defaults to both
@@ -85,14 +87,14 @@ architecture; it is not an HttpOnly-cookie implementation.
 
 ## API contract
 
-| Request | Success |
-| --- | --- |
-| `POST /api/auth/register` with full_name, username, email, password, phone_number | 201, `{message, farmer}`; no token and no password hash |
-| `POST /api/auth/login` with username, password | 200, `{message, token, farmer}` |
-| `GET /api/auth/session` with Bearer JWT | 200, `{farmer}` |
-| `POST /api/auth/logout` with Bearer JWT | 200 after the matching server-side session is deleted |
-| `POST /api/auth/forgot-password` | Generic 202 for valid requests; 503 if SMTP recovery is not configured |
-| `POST /api/auth/reset-password` | Reset with an expiring single-use token; revoke existing sessions |
+| Request                                                                           | Success                                                                |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `POST /api/auth/register` with full_name, username, email, password, phone_number | 201, `{message, farmer}`; no token and no password hash                |
+| `POST /api/auth/login` with username, password                                    | 200, `{message, token, farmer}`                                        |
+| `GET /api/auth/session` with Bearer JWT                                           | 200, `{farmer}`                                                        |
+| `POST /api/auth/logout` with Bearer JWT                                           | 200 after the matching server-side session is deleted                  |
+| `POST /api/auth/forgot-password`                                                  | Generic 202 for valid requests; 503 if SMTP recovery is not configured |
+| `POST /api/auth/reset-password`                                                   | Reset with an expiring single-use token; revoke existing sessions      |
 
 Protected endpoints use the same JWT middleware. Invalid/expired/revoked tokens
 return 401. Database/session-service outages return 503 and do not clear a valid

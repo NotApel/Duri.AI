@@ -137,6 +137,12 @@ export default function DetectionDetails({
             <StatusBadge status={event.status} />
           </div>
           <h2>What happened?</h2>
+          {event.simulation && (
+            <p className="d-notice">
+              Simulated Raspberry Pi event · this record does not verify
+              physical sensing or inference.
+            </p>
+          )}
           <p>
             Reported detection from the backend. Missing evidence remains
             unavailable.

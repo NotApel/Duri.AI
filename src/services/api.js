@@ -1,4 +1,27 @@
-// Set VITE_API_URL for a deployed API. The default follows the browser hostname.
+// Production must explicitly target the HTTPS Railway API; localhost remains convenient in development.
+if (import.meta.env?.PROD) {
+  try {
+    const url = new URL(import.meta.env.VITE_API_URL);
+    const local = ["localhost", "127.0.0.1", "[::1]"];
+    const localPreview =
+      local.includes(window.location.hostname) &&
+      local.includes(url.hostname) &&
+      url.protocol === "http:";
+    if (
+      (!localPreview && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !url.pathname.endsWith("/api")
+    )
+      throw new Error();
+  } catch {
+    throw new Error(
+      "Set VITE_API_URL to the HTTPS backend URL ending in /api before building for production.",
+    );
+  }
+}
 export const API_URL = (
   import.meta.env?.VITE_API_URL || `http://${window.location.hostname}:3000/api`
 ).replace(/\/$/, "");

@@ -33,7 +33,21 @@ async function port() {
 function start(script, args, cwd, env) {
   const child = spawn(process.execPath, [script, ...args], {
     cwd,
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      ...(script.endsWith("app.js")
+        ? {
+            NODE_ENV: "test",
+            DATABASE_URL: "",
+            DB_SSL: "false",
+            PUSH_ENABLED: "false",
+            PUSH_WORKER_DISABLED: "true",
+            SUPABASE_URL: "",
+            SUPABASE_SERVICE_ROLE_KEY: "",
+          }
+        : {}),
+      ...env,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   children.push(child);

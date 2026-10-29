@@ -14,8 +14,9 @@ Use these as the intended architecture, while verifying what is actually impleme
 
 - **Existing software stack:** the project has already started with Node.js. Extend the current Node.js application and its existing structure; do not migrate to Laravel or restart the project unless explicitly requested.
 - **Web client:** build a responsive Progressive Web App (PWA) suitable for phones used in an orchard, with clear touch targets, useful offline/loading/error states, and push-notification support where the current platform permits it.
-- **Edge vision:** Raspberry Pi 5 nodes are intended to run image verification with TensorFlow Lite.
+- **Edge vision:** Raspberry Pi 4 gateways process ESP32 sensor data and run image verification with TensorFlow Lite before sending processed events to the separate Node.js backend.
 - **Sensor hub:** ESP32 gathers or coordinates vibration-sensor readings and passes event data to the appropriate processing layer.
+- **Cloud hosting:** Node.js runs on Railway, PostgreSQL and private image storage use Supabase, and the PWA runs on Vercel. Farmer sessions remain owned by this backend; Supabase Auth is not used. Web Push uses the `web-push` package and a durable PostgreSQL delivery outbox.
 - **Connectivity:** the intended flow includes a 4G connection between the orchard system and the cloud. Expect intermittent connectivity; handle retries and stale data safely.
 - **Alert decision:** treat vibration as a candidate event, not proof of a fallen durian. The intended detection flow requires vibration evidence and camera verification to agree before issuing a confirmed harvest alert. Keep uncertain results distinguishable from confirmed results.
 - **Farmer alert:** an alert should provide the orchard/location information available to the system, a useful image preview when available, a timestamp, and a clear event status.
@@ -51,15 +52,17 @@ These notes describe product intent, not proof that every hardware or cloud comp
 The interface should feel designed specifically for **durian harvesting in Malaysian orchards**, not like a generic SaaS admin template. Use the content, hierarchy, and visual language to help a farmer make quick decisions in bright outdoor conditions and on a phone.
 
 <frontend_aesthetics>
-You tend to converge toward generic, "on distribution" outputs. In frontend design,this creates what users call the "AI slop" aesthetic. Avoid this: make creative,distinctive frontends that surprise and delight. 
+You tend to converge toward generic, "on distribution" outputs. In frontend design,this creates what users call the "AI slop" aesthetic. Avoid this: make creative,distinctive frontends that surprise and delight.
 
 Focus on:
+
 - Typography: Use Montserrat as the standard font for headings, interface text, and numeric telemetry. Reuse the existing `--font-sans` token in `src/index.css`; use weight, size, spacing, and hierarchy to create distinction rather than introducing another font.
 - Color & Theme: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes. Use IDE themes and cultural aesthetics for inspiration.
 - Motion: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions.
 - Backgrounds: Create atmosphere and depth rather than defaulting to solid colors. Layer CSS gradients, use geometric patterns, or add contextual effects that match the overall aesthetic.
 
 Avoid generic AI-generated aesthetics:
+
 - Overused font families (Inter, Roboto, Arial, system fonts)
 - Clichéd color schemes (particularly purple gradients on white backgrounds)
 - Predictable layouts and component patterns

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Save } from "lucide-react";
+import PushSettings from "./PushSettings";
 export default function Settings() {
   const [saved, setSaved] = useState(false);
   return (
@@ -7,9 +8,10 @@ export default function Settings() {
       <header className="ui-page-header">
         <h1>Settings</h1>
       </header>
+      <PushSettings />
       <p className="ui-notice">
-        Demo preferences only. These controls do not enable push notifications,
-        offline storage, or change a deployed model.
+        The preferences below are demonstrations only. Offline record
+        synchronization and model threshold changes are not connected.
       </p>
       <form
         className="ui-panel ui-form settings-grid"
@@ -20,15 +22,6 @@ export default function Settings() {
         }}
       >
         <h2>Preferences</h2>
-        <label className="ui-setting ui-field" htmlFor="push-alerts">
-          <span>
-            Push notifications
-            <span className="ui-setting-description">
-              Not connected in this preview.
-            </span>
-          </span>
-          <input id="push-alerts" type="checkbox" defaultChecked />
-        </label>
         <label className="ui-setting ui-field" htmlFor="offline-cache">
           <span>
             Offline cache

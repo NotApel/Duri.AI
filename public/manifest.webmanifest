@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "Duri.AI Harvest Monitoring",
+  "short_name": "Duri.AI",
+  "description": "Harvest events, orchard records and farmer alerts.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#37583a",
+  "background_color": "#fffaf0",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
