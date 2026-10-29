@@ -11,8 +11,37 @@ function read(path, { signal } = {}) {
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
 }
-export async function fetchDetections(options) {
-  return normalizeDetections(await read("/detections", options));
+export async function fetchDetectionPage({
+  cursor,
+  prediction = "",
+  signal,
+} = {}) {
+  const query = new URLSearchParams({ limit: "20" });
+  if (cursor) query.set("cursor", cursor);
+  if (prediction) query.set("prediction", prediction);
+  const result = await read(`/detections?${query}`, { signal });
+  if (
+    !result ||
+    !Array.isArray(result.items) ||
+    !(
+      result.next_cursor === null ||
+      (typeof result.next_cursor === "string" && result.next_cursor.length > 0)
+    )
+  )
+    throw new Error("The server returned invalid detection history.");
+  return {
+    events: normalizeDetections(result.items),
+    nextCursor: result.next_cursor,
+  };
+}
+export async function fetchDetection(eventId, options) {
+  if (!recordId(eventId)) throw new Error("This detection has an invalid ID.");
+  const [event] = normalizeDetections([
+    await read(`/detections/${encodeURIComponent(eventId)}`, options),
+  ]);
+  if (event.id !== eventId)
+    throw new Error("The server returned a different detection.");
+  return event;
 }
 export async function fetchFeedbackCategories(options) {
   return normalizeCategories(await read("/feedback-categories", options));

@@ -167,7 +167,13 @@ export async function logoutFarmer() {
 // ==========================================
 // AI TRAINING FUNCTIONS (Damia's Code)
 // ==========================================
-export const fetchTraining = () => apiRequest("/analytics/training");
+export const fetchTraining = (options = {}) =>
+  apiRequest("/analytics/training", {
+    ...options,
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(15000)])
+      : AbortSignal.timeout(15000),
+  });
 export const retrain = () =>
   apiRequest("/analytics/retrain", { method: "POST" });
 

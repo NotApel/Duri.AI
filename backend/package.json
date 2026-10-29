@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "node --require dotenv/config --test auth.test.cjs passwordRecovery.test.cjs"
+    "test": "node --require dotenv/config --test auth.test.cjs passwordRecovery.test.cjs priorities.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -1,226 +1,178 @@
-# Farm plots, sensor nodes and notifications: backend setup guide
+# Farm management, map locations, detections and training setup
 
-This feature changes the frontend only. No backend route, database schema,
-production record, auth flow, dependency or hardware integration was changed.
-It builds on `feature/detection-integration` and is published on
-`feature/farm-management`.
+The farm management UI supports **Browser simulation** and **Backend records**.
+This branch implements the matching Node.js/PostgreSQL routes. Existing login,
+Montserrat, palette and grid layout are preserved. No new framework is required.
 
-## Frontend walkthrough
+## Start in VS Code on Windows
 
-1. Log in normally. A working authentication backend is still required; no preview
-   login or authentication bypass is provided.
-2. Open **Farm plots** from the sidebar or **More → Farm plots** on a phone.
-   **Browser simulation** is the default management source. Create a plot with
-   a farm name, plot name, positive size in hectares and reference coordinates.
-   Select it, edit it or cancel an edit. Zero coordinates are valid. Coordinates
-   are reference points, not measured fruit locations.
-3. Open **Node Status**. The selected plot carries across navigation/reloads.
-   Register a named node with an optional firmware version. New nodes start
-   OFFLINE, with battery and heartbeat unavailable. Edit/reassign a node before it
-   has event history. Reassignment after an event is blocked to preserve history.
-4. **Simulate online/offline** changes only local demonstration state. An online
-   simulation records the time of that action as its simulated heartbeat; battery
-   remains unavailable. **Simulate candidate event** creates an unverified
-   candidate and unread notification, with no invented measurements or prediction.
-5. Open **Notifications** (**Alerts** on a phone). Filter all/unread/read, inspect
-   a notification, explicitly **Mark as read**, and follow **View detection details**.
-   Opening a notification alone does not mark it read. Simulated event details use
-   `/map/simulation/events/:id`, clearly separate from real backend event routes.
-6. Switch **Management data source** to **Backend records** to use the server.
-   Backend mode never falls back to simulation on errors. Currently available:
-   plot list/create, node list and notification list. Missing writes display an
-   error and retain edits/read state; they never claim a PostgreSQL save.
-
-Simulation is stored in `localStorage` under `duriai.farm-simulation.v1.<farmerId>`.
-Mode and selected backend plot are separate, account-scoped `sessionStorage`
-preferences. Records are not synced to PostgreSQL or another device. A storage
-failure prevents a successful-save message. Corrupt saved simulation is reported
-and cannot be overwritten by ordinary saves. **Reset farm simulation** asks for
-confirmation and clears only that account's local farm simulation. Normal backend
-Orchard Map detections, feedback receipts and Harvest Logs are unaffected.
-
-Reload still needs a working auth session/backend. No offline installation,
-service-worker caching, actual browser push, real OTA or firmware deployment is
-implemented by these screens.
-
-## 1. Start the existing backend in VS Code / Windows
-
-The backend developer should first follow [authentication setup](authentication.md).
-Keep any existing database/accounts; do not drop tables or run a destructive seed.
-
-1. In the repository root, run `npm ci`.
-2. In a second terminal, run `cd backend`, then `npm ci`.
-3. Start PostgreSQL. In pgAdmin, identify the intended development database, login
-   role and port. Existing tables must include `farmer`, `farm_plot`, `sensor_node`,
-   `sensor_reading`, `detection`, `detection_image`, `feedback_category`,
-   `detection_feedback`, `notification` and `training_queue`.
-4. For an entirely new database only, apply the CREATE TABLE files in this order:
+1. Install root dependencies with `npm ci`. In another terminal, run `cd backend`
+   and `npm ci`.
+2. Start PostgreSQL. Keep the existing database and accounts. Use
+   [authentication setup](authentication.md) to configure the existing `DB_*`,
+   `JWT_SECRET`, exact `FRONTEND_ORIGINS` and `DEVICE_API_KEY` settings in
+   `backend/.env`. Never commit the file or put device credentials in frontend code.
+3. For a **new, empty database only**, apply repository schema files in this order:
    `farmer.sql`, `farmplot.sql`, `sensornode.sql`, `sensorreading.sql`,
    `detection.sql`, `detectionimage.sql`, `feedbackcategory.sql`,
    `detectionfeedback.sql`, `notification.sql`, `trainingqueue.sql`.
-   Existing databases need inspected, additive migrations rather than rerunning
-   CREATE TABLE scripts. No new schema is required for the proposed routes below.
-5. Create an untracked `backend/.env` using `backend/.env.example` as a reference:
+   Do not rerun CREATE TABLE scripts or destructive seeds on an existing database.
+4. Run `npm start` inside `backend/`. The existing startup migration transaction
+   now includes `003_farm_locations.sql`. It removes the NOT NULL requirement from
+   legacy plot coordinates and adds nullable device coordinates/location time and
+   an `is_active` flag to nodes. Existing plot coordinates, accounts, sensor records
+   and detections are preserved. Migration is repeatable and tolerates auth-only
+   installations. After adding farm tables to an auth-only installation, restart
+   the backend to apply the farm migration.
+5. Run `npm run dev` in the repository root. Log in normally. Under Farm plots or
+   Node Status, select **Management data source → Backend records** for PostgreSQL
+   workflows. Simulation remains the default, deliberately separate from backend
+   records and Harvest Logs.
 
-   ```dotenv
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=your_development_database
-   DB_USER=your_development_role
-   DB_PASSWORD=your_local_password
-   JWT_SECRET=replace_with_a_unique_random_secret
-   PORT=3000
-   FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-   DEVICE_API_KEY=replace_with_a_separate_device_secret
-   ```
+## Farmer workflows
 
-   Generate a JWT secret locally with:
+- Create/edit/select plots using farm name, plot name and a positive size in
+  hectares. No coordinates are requested from the farmer. Editing does not erase
+  retained legacy reference coordinates.
+- Register a node against an owned plot. Firmware version is optional. A new node
+  starts OFFLINE with unknown battery, heartbeat and position. Registration does
+  not install firmware or connect hardware.
+- Reassign an unused node between owned plots. A node with **any sensor readings**
+  cannot be reassigned; this preserves historical plot ownership. In simulation,
+  reassignment is blocked once a candidate event exists.
+- Disable/enable nodes without deleting their history. Disabled nodes display as
+  disabled and the API rejects their heartbeat, sensor-reading, device-detection
+  and fusion submissions. This flag does not remotely power off hardware. Enabling
+  alone does not manufacture a heartbeat.
+- Delete unused nodes and empty plots after a confirmation. A node with sensor
+  history or a plot with registered nodes returns `409`; retain/disable the node
+  instead. Failed operations roll back transactions and keep records intact.
+- **Simulate online/offline** and **Simulate candidate event** affect only local,
+  account-scoped browser simulation. No real hardware, GPS, battery or AI result
+  is invented. Disable blocks new simulated events; simulation delete guards keep
+  event history. Old simulation records remain readable after coordinate removal.
+- Notification listing, explicit read state and detection links keep their existing
+  behaviour. Backend mode never silently switches to simulation when an API fails.
 
-   ```sh
-   node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-   ```
+## API contracts
 
-   Never commit the resulting secret or `.env`. `DATABASE_URL` alone is not used.
-6. Run `npm start` or `npm run dev` in `backend/`. Existing auth migrations run
-   before the server listens. Resolve startup errors before frontend integration.
-7. Run `npm run dev` in the repository root. Add the exact printed frontend origin
-   to `FRONTEND_ORIGINS` if the port differs. Optional frontend `VITE_API_URL` must
-   include `/api`, for example `http://localhost:3000/api`. Use the same hostname
-   for frontend and backend. Register an account, log in, and select Backend records.
+IDs are decimal strings to preserve PostgreSQL BIGINT precision. Farmer routes use
+JWT/session authentication and derive the owner from `req.farmer.id`. Missing or
+foreign records return `404`, invalid input `400`, history/duplicate conflicts
+`409`, and operational failures `503`. Legacy singular plot/detection aliases
+remain supported.
 
-## 2. Endpoints expected by the frontend
+| Endpoint                                        | Behaviour                                                                              |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `GET/POST /api/farmers/:farmerId/plots`         | List/create owned plots                                                                |
+| `PATCH/DELETE /api/plots/:plotId`               | Edit or delete an owned, empty plot                                                    |
+| `GET/POST /api/plots/:plotId/nodes`             | List/register nodes in an owned plot                                                   |
+| `PATCH /api/nodes/:nodeId`                      | Save `node_name`, optional `firmware_version`, `plot_id`, optional boolean `is_active` |
+| `DELETE /api/nodes/:nodeId`                     | Delete a node only without sensor history                                              |
+| `GET /api/nodes`                                | All owned nodes, including latest reported positions and derived connection status     |
+| `POST /api/device/nodes/:nodeId/heartbeat`      | Device-key-authenticated telemetry report                                              |
+| `GET /api/notifications`                        | Owned notifications                                                                    |
+| `PATCH /api/notifications/:notificationId/read` | Mark an owned notification read                                                        |
 
-All routes below require the existing JWT/session authentication middleware. IDs
-are strings, preserving PostgreSQL BIGINT precision. Responses must be JSON. All
-server ownership checks must derive identity from `req.farmer.id` (a string).
-Do not compare that string to a numeric `parseInt(...)` with strict inequality.
-Do not trust a route/body farmer ID as authorization.
+Create/update plot payload: `{farm_name, plot_name, plot_size}`. Size is between
+0.01 and 999999.99 hectares. Node names have 1–50 characters and firmware versions
+at most 20. Device connection state cannot be set by a farmer PATCH request.
 
-| Endpoint | Present on current main? | Expected successful response |
-| --- | --- | --- |
-| `GET /api/farmers/:farmerId/plots` | Yes; ownership still needs enforcement | Array of owned plot rows |
-| `POST /api/farmers/:farmerId/plots` | Yes; validation/ownership need hardening | `201`, created plot row |
-| `PATCH /api/plots/:plotId` | No | `200`, updated owned plot row |
-| `GET /api/plots/:plotId/nodes` | Yes; ownership still needs enforcement | Array of nodes belonging to an owned plot |
-| `POST /api/plots/:plotId/nodes` | No | `201`, registered node row |
-| `PATCH /api/nodes/:nodeId` | No | `200`, updated node row |
-| `GET /api/notifications` | Yes; currently a global latest-50 list | Array filtered server-side to the authenticated farmer |
-| `PATCH /api/notifications/:notificationId/read` | No | `200`, updated owned notification row with `is_read: true` |
+### Device locations and heartbeat
 
-Frontend notification filtering excludes other farmer IDs from display as an
-interim measure. The current server still sends those records over the network;
-client filtering is not access control. Fix ownership before production use.
-Until the server filters/paginates correctly, lists and unread counts only describe
-records returned by the API, not the complete account history.
+The IoT/backend developer calls the heartbeat endpoint with the existing
+`x-api-key` header. Body fields are optional, but latitude and longitude must be
+supplied **together**, as valid numeric coordinates (-90..90 and -180..180).
+`battery_level` is an optional integer percentage (0..100); omitted battery is
+reported unavailable. Use actual measured/configured device coordinates. For
+hardware-free demonstrations, submit simulated telemetry only to a separate test
+farm/database and identify it as simulation in the presentation.
 
-### Plot create/update
+The backend stamps `last_ping_at` and, when coordinates are supplied,
+`location_recorded_at`. An omitted location preserves the last reported location.
+`NODE_OFFLINE_AFTER_SECONDS` defaults to 300. ONLINE requires an active node with
+an ONLINE report and a sufficiently recent heartbeat. Reading the list derives
+stale nodes as OFFLINE without fabricating a new device report.
 
-```json
-{
-  "farm_name": "Demo farm",
-  "plot_name": "East plot",
-  "plot_size": 2.5,
-  "latitude": "0",
-  "longitude": "101.5"
-}
-```
+The Orchard Map plots only valid device-supplied coordinate pairs with a report
+time. There are no sample boundaries or fabricated pins. No locations produces an
+explicit empty state. Pins show the latest node location and timestamp, **not an
+exact fruit position or a historical GPS fix at detection time**. Old positions
+remain labelled with their report time; tiles still require an internet connection.
+Existing device API keys are shared credentials; per-device provisioning remains
+future IoT/backend work.
 
-Validate trimmed names (1–200 characters), positive finite size up to 999999.99,
-latitude −90…90 and longitude −180…180. Reject null/blank coordinates, but accept
-numeric zero. The frontend currently sends coordinate strings to support the
-legacy create handler's truthiness check. Use explicit validation in the backend.
-Whitelist writable fields; derive ownership from auth. A response must include
-`plot_id`, `farmer_id`, both names, `plot_size`, `latitude` and `longitude`.
-The edit response ID must match the requested plot.
+## Detection history and feedback
 
-### Node registration/update and assignment
+`GET /api/detections?limit=20&prediction=DURIAN&cursor=...` returns
+`{items, next_cursor}`. Prediction is optional (`DURIAN` or `NOT_DURIAN`); the cursor
+is opaque. Limits are 1–100. Pagination uses timestamp plus ID and preserves
+PostgreSQL timestamp microseconds, so equal/near-equal timestamps do not skip
+records. New events appear after a refresh; older pages use a cursor rather than
+an offset that shifts when new events arrive. Default requests without query
+parameters retain an array response, now up to 20 rows.
 
-```json
-{
-  "plot_id": "7",
-  "node_name": "East node 1",
-  "firmware_version": "v1.0.0"
-}
-```
+Harvest Logs retains **Date, Time (MYT), Detection type, Node**, with Previous/Next
+page controls. Type filtering is server-side across history. CSV/PDF exports
+include **only the currently displayed page**, stated in the screen and PDF.
+Map list filters apply to loaded records, with **Load older events** for more.
 
-Require an owned target plot and a trimmed node name (1–50 characters). Firmware
-is optional metadata, at most 20 characters; an empty value is sent as null.
-Resolve duplicate names deliberately (recommended case-insensitive uniqueness),
-returning `409` instead of silently replacing an existing node.
+`GET /api/detections/:id` loads owned events independently of the latest page.
+`GET /api/detections/:id/images` checks the same ownership. List/details include
+available raw sensor values, latest node location, image metadata and the latest
+accepted farmer feedback. Missing values remain unavailable.
 
-New nodes should default OFFLINE, with null battery and heartbeat. Return
-`node_id`, `plot_id`, `node_name`, `firmware_version`, `status`, `battery_level`
-and `last_ping_at`. The frontend accepts only ONLINE/OFFLINE as reported states;
-unknown/missing states display UNKNOWN. Editing metadata does not flash firmware.
-Do not permit an ordinary farmer PATCH to invent battery, heartbeat or connectivity.
-Derive those fields from authenticated device telemetry and a documented timeout.
+`GET /api/detections/:id/feedback` also retrieves the saved assessment, preserving
+the endpoint introduced on `feature/seed-data`. Missing feedback returns `404`.
 
-For reassignment, verify ownership of both current and destination plots within a
-transaction. The existing reading history joins through the node's current plot;
-changing `plot_id` can relabel history. Return `409` if the node has readings/events,
-or first implement immutable event/plot attribution with an additive migration.
-This frontend simulation blocks reassignment after its first candidate event.
+Feedback POST at `/api/detections/:id/feedback` requires a boolean
+`correct_detection`: true means **Durian**, false means **No Durian**. A configured
+`category_id` is required only for No Durian and optional for Durian. Comments
+(`comment_farmer`) are optional for both and limited to 500 characters. Farmer
+identity comes from the session; a conflicting body farmer ID is rejected.
 
-### Notifications and read updates
+Model REJECTED status alone does not disable the form. The model prediction stays
+unchanged when the farmer corrects it. A previously accepted farmer assessment is
+shown from the server after reload or session-storage loss. Concurrent duplicate
+submissions are serialized on the event row and return `409`; they do not create
+extra training queue entries. Legacy duplicates are retained, not silently deleted.
+The optional feedback image must be a valid JPEG/PNG payload of at most 5 MB and
+is saved as `backend/feedback_images/feedback_<detectionId>.jpg` or `.png`. This
+storage is not a new image-serving or model-dataset deployment pipeline.
 
-A notification row uses:
+## Truthful AI Training
 
-```json
-{
-  "notification_id": "73",
-  "farmer_id": "42",
-  "detection_id": "101",
-  "title": "Candidate needs review",
-  "message_noti": "Inspect the available evidence.",
-  "is_read": false,
-  "created_at": "2026-10-23T09:00:00Z"
-}
-```
+The Training screen shows actual account-scoped feedback/queue counts. Legacy
+99.93%, 85%/92% history, farmer points, a fixed five-minute progress estimate and
+claims of automatic model improvement are removed. Accuracy/history remain
+**Unavailable** until genuine evaluations with model version, evaluation date,
+positive test sample count and bounded numeric accuracy are supplied.
 
-The read PATCH has no request body. Use an ownership-scoped, idempotent update:
-`UPDATE notification SET is_read = TRUE WHERE notification_id = $1 AND farmer_id = $2 RETURNING *`.
-Return the resulting row even if already read. The frontend validates the ID,
-owner and true boolean before updating its UI; `204` alone is not this contract.
-Return 404 for missing/unowned records without exposing another farmer's details.
-Return 401 for an expired session, 400/422 for invalid fields, 409 for conflicts,
-and a non-success status on database errors. Never return a successful read update
-before its transaction commits.
+Optional `PYTHON_PATH` and `RETRAIN_SCRIPT_PATH` must point to an installed
+executable and actual training script. Without them, retraining is disabled and
+POST returns `503`. Configured scripts run without a shell; paths with spaces are
+supported. A second concurrent start returns `409`. The API reports idle,
+processing, success or failed **worker state**. This state is in memory and resets
+when the backend restarts; multi-process/durable job orchestration remains future
+work. Script output is not a verified evaluation or proof of device deployment.
+No queue records are automatically marked completed merely because a process
+exits successfully. The future verified training pipeline must record what it
+processed and persist evaluation/deployment evidence.
 
-Notification event links currently open `/map/events/:detectionId`, whose API only
-returns the latest ten detections. Older events show unavailable. Add an owned
-single-event lookup and coordinate frontend support separately; do not substitute
-sample events. Candidate alerts must remain distinct from verified harvest alerts.
-Actual push delivery, subscriptions and permissions require separate implementation.
+This does not implement offline PWA installation, browser push, real hardware
+capture/inference/fusion verification, or model evaluation/deployment.
 
-## 3. Backend acceptance checklist
+## Verification
 
-- Test owner A and owner B: no cross-farmer reads, node assignments, edits or read
-  updates. Test unauthenticated requests and revoked/expired sessions.
-- Test zero coordinates, blank fields, name/size limits and duplicate node names.
-- Test registration defaults, reassignment with and without history, and rollback
-  if an assignment transaction fails. Preserve all existing readings and accounts.
-- Mark a notification read twice; both responses should return the same owned read
-  row. Unavailable database/endpoint must not report success. Consider idempotency
-  keys for creation so retries after lost responses cannot create duplicates.
-- Use explicitly labelled simulated sensor events until hardware is ready. Do not
-  invent telemetry, measured model metrics or successful device updates.
-
-## Frontend verification
-
-- `node --test tests/*.test.js`: plot validation, registration, assignment/history,
-  candidate integrity, notification filtering and existing detection regressions.
-- Focused ESLint on changed frontend files and `npm run build` with output directed
-  outside the repository to avoid rewriting already tracked `dist` artifacts.
-- `NODE_PATH=/path/to/test-tools/node_modules node tests/farmManagement.browser.cjs`
-  uses external Playwright/Chromium, starts Vite, and intercepts API responses.
-  It checks simulation, forms/cancel, read states, links, persistence/storage errors,
-  account isolation, missing/current/proposed backend contracts, source separation
-  and 320/390/1440 layouts. It is not proof that the proposed backend routes exist.
-- Existing real-backend detection and authentication tests remain separate.
-
-Verification on this branch: all 23 unit tests, all 9 real-backend authentication
-tests, the real-backend detection browser regression, the mocked management browser
-workflow, focused frontend ESLint and the production build pass. Main's existing
-full-repository lint failures in `backend/app.js` and `TrainingHistory.jsx` are
-outside this frontend task; those files remain unchanged. Build artifacts and test
-screenshots are directed to temporary directories instead of tracked `dist` files.
+- Root data tests: `node --test tests/*.test.js`.
+- Backend integration tests: `npm --prefix backend test`. Use a local PostgreSQL
+  role allowed to create/drop disposable test databases; never point tests at
+  production. Test helpers ignore DB_NAME and create unique databases.
+- Browser tests: `tests/priorities.browser.cjs`,
+  `tests/detectionIntegration.browser.cjs`, `tests/farmManagement.browser.cjs`.
+  Install Playwright as a development test tool and supply Chromium and local
+  PostgreSQL connection settings. Each real-backend workflow creates its own
+  database; no external email is sent. The new workflow simulates device reports
+  through the authenticated device API. Basemap/provider delivery and physical
+  hardware are not tested.
+- `npm run build` and focused ESLint for changed production files.

@@ -119,6 +119,7 @@ export function updateFarm(state, action) {
       );
     const node = {
       node_id: id,
+      is_active: true,
       status: "OFFLINE",
       battery_level: null,
       last_ping_at: null,
@@ -132,9 +133,44 @@ export function updateFarm(state, action) {
         : [...state.nodes, node],
     };
   }
-  if (type === "connection") {
+  if (type === "deletePlot") {
+    if (!state.plots.some((p) => p.plot_id === id))
+      throw new Error("Plot not found.");
+    if (state.nodes.some((n) => n.plot_id === id))
+      throw new Error(
+        "Remove this plot’s unused nodes first. Nodes with event history must be retained.",
+      );
+    return {
+      ...state,
+      plots: state.plots.filter((p) => p.plot_id !== id),
+      selectedPlotId: state.selectedPlotId === id ? "" : state.selectedPlotId,
+    };
+  }
+  if (type === "deleteNode") {
+    if (!state.nodes.some((n) => n.node_id === id))
+      throw new Error("Node not found.");
+    if (state.events.some((e) => e.node_id === id))
+      throw new Error("This node has event history. Disable it instead.");
+    return { ...state, nodes: state.nodes.filter((n) => n.node_id !== id) };
+  }
+  if (type === "active") {
     if (
       !state.nodes.some((n) => n.node_id === id) ||
+      typeof action.is_active !== "boolean"
+    )
+      throw new Error("Invalid node state.");
+    return {
+      ...state,
+      nodes: state.nodes.map((n) =>
+        n.node_id === id
+          ? { ...n, is_active: action.is_active, status: "OFFLINE" }
+          : n,
+      ),
+    };
+  }
+  if (type === "connection") {
+    if (
+      !state.nodes.some((n) => n.node_id === id && n.is_active !== false) ||
       !["ONLINE", "OFFLINE"].includes(action.status) ||
       !validTime(now)
     )
@@ -156,6 +192,7 @@ export function updateFarm(state, action) {
     const node = state.nodes.find((n) => n.node_id === id);
     if (
       !node ||
+      node.is_active === false ||
       !validTime(now) ||
       !validId(action.eventId) ||
       !validId(action.notificationId)

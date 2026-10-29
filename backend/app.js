@@ -12,6 +12,8 @@ const { exec, spawn } = require("child_process");
 const rateLimit = require("express-rate-limit");
 const cron = require("node-cron"); // NEW: Untuk auto-retraining
 const { createAuth, migrateAuth } = require("./auth");
+const { createFarmRoutes } = require("./farmRoutes");
+const { createDetectionRoutes } = require("./detectionRoutes");
 const app = express();
 
 // baca something dari fail .env/ setup .env
@@ -76,6 +78,7 @@ const pool = new Pool({
 const { router: authRouter, authenticate: auth } = createAuth(pool);
 app.use("/api/auth", authRouter);
 
+  // check health
 // RETRAINING VARIABLES
 let retrainStatus = "idle";
 let retrainError = "";
@@ -92,7 +95,7 @@ app.get("/api/health", async (req, res) => {
       status: "OK",
       message: "Duri.AI Backend is running! Database connected.",
     });
-  } catch (error) {
+  } catch {
     res
       .status(500)
       .json({ status: "ERROR", message: "Database connection failed" });
@@ -109,7 +112,7 @@ app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
       [req.farmer.id], // dari token JWT
     );
     res.json(result.rows);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: "Failed to fetch farmers" });
   }
 });
@@ -133,11 +136,14 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth, async (req, res) => {
     if (result.rows.length === 0)
       return res.status(404).json({ error: "Farmer not found" });
     res.json(result.rows[0]);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: "Failed to fetch farmer" });
   }
 });
 
+// Farm configuration, device locations and detection history.
+app.use("/api", createFarmRoutes(pool, auth, deviceAuth));
+app.use("/api", createDetectionRoutes(pool, auth));
 // 2. farm plot endpoint - table farmplot
 
 // dpt semua maklumat plot
@@ -349,6 +355,11 @@ app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
     if (!reading_id || !prediction || confidence === undefined)
       return res.status(400).json({ error: "Missing required fields" });
 
+    if (typeof prediction !== "string" || !["DURIAN","NOT_DURIAN"].includes(prediction.toUpperCase()))
+      return res.status(400).json({error:"Invalid prediction."});
+    const ownReading = await pool.query("SELECT 1 FROM sensor_reading sr JOIN sensor_node sn ON sn.node_id=sr.node_id JOIN farm_plot fp ON fp.plot_id=sn.plot_id WHERE sr.reading_id=$1 AND fp.farmer_id=$2",[reading_id,req.farmer.id]);
+    if (!ownReading.rows.length) return res.status(404).json({error:"Sensor reading not found."});
+
     prediction = prediction.toUpperCase();
     detection_status = detection_status
       ? detection_status.toUpperCase()
@@ -365,13 +376,14 @@ app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
       ],
     );
     res.status(201).json(result.rows[0]);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: "Failed to create detection" });
   }
 });
 
 // 5. detection image endpoints - table detection-image
 
+  // 6. feedback category endpoints - table feedback category
 //dpt gambar untuk selection detection
 app.get(
   [
@@ -492,10 +504,11 @@ app.get(
   async (req, res) => {
     try {
       const result = await pool.query(
-        "SELECT * FROM training_queue ORDER BY queue_at DESC LIMIT 20",
+        "SELECT tq.* FROM training_queue tq JOIN detection_feedback df ON df.feedback_id=tq.feedback_id WHERE df.farmer_id=$1 ORDER BY tq.queue_at DESC,tq.queue_id DESC LIMIT 20",
+        [req.farmer.id],
       );
       res.json(result.rows);
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch training queue" });
     }
   },
@@ -546,37 +559,32 @@ app.patch("/api/notifications/:notificationId/read", auth, async (req, res) => {
 // dpt analytics stat
 app.get("/api/analytics/stats", auth, async (req, res) => {
   try {
-    const total = await pool.query("SELECT COUNT(*) FROM detection");
-    const verified = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'VERIFIED'",
-    );
-    const rejected = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'REJECTED'",
-    );
-    const pending = await pool.query(
-      "SELECT COUNT(*) FROM detection WHERE detection_status = 'PENDING'",
-    );
-    res.json({
-      total: parseInt(total.rows[0].count, 10),
-      verified: parseInt(verified.rows[0].count, 10),
-      rejected: parseInt(rejected.rows[0].count, 10),
-      pending: parseInt(pending.rows[0].count, 10),
-    });
-  } catch (error) {
+    const result = await pool.query(`SELECT count(*)::int AS total,
+      count(*) FILTER (WHERE d.detection_status='VERIFIED')::int AS verified,
+      count(*) FILTER (WHERE d.detection_status='REJECTED')::int AS rejected,
+      count(*) FILTER (WHERE d.detection_status='PENDING')::int AS pending
+      FROM detection d JOIN sensor_reading sr ON sr.reading_id=d.reading_id
+      JOIN sensor_node sn ON sn.node_id=sr.node_id JOIN farm_plot fp ON fp.plot_id=sn.plot_id
+      WHERE fp.farmer_id=$1`,[req.farmer.id]);
+    res.json(result.rows[0]);
+  } catch {
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
 
-app.get("/api/analytics/training", auth, async (req, res) => {
-  try {
-    const corrections = await pool.query(
-      "SELECT COUNT(*) FROM detection_feedback",
-    );
-    const pending = await pool.query(
-      "SELECT COUNT(*) FROM training_queue WHERE queue_status = 'PENDING'",
-    );
-    const totalCorrections = parseInt(corrections.rows[0].count);
+app.use("/api", require("./trainingRoutes").createTrainingRoutes(pool, auth));
 
+// Disabled nodes retain history but cannot submit new device reports.
+app.use(["/api/sensor-readings", "/api/device/detections", "/api/fusion-event"], deviceAuth, async (req,res,next) => {
+  if (req.method !== "POST") return next();
+  const nodeId = req.body?.node_id;
+  if ((typeof nodeId === "number" && !Number.isSafeInteger(nodeId)) || !require("./apiHelpers").id(String(nodeId ?? "")))
+    return res.status(400).json({error:"Invalid node ID."});
+  try {
+    const active = await pool.query("SELECT 1 FROM sensor_node WHERE node_id=$1 AND is_active=TRUE",[nodeId]);
+    if (!active.rows.length) return res.status(404).json({error:"Active node not found."});
+    next();
+  } catch { res.status(503).json({error:"Unable to check node availability."}); }
     res.json({
       totalCorrections: totalCorrections,
       pendingTraining: parseInt(pending.rows[0].count),
@@ -704,7 +712,7 @@ cron.schedule("0 2 * * 0", () => {
 });
 
 // ============================================================
-// HARDWARE ENDPOINTS (INTACT)
+// HARDWARE ENDPOINTS
 // ============================================================
 app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   try {
@@ -719,7 +727,7 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
     res
       .status(201)
       .json({ message: "Sensor reading saved", reading: result.rows[0] });
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: "Failed to save sensor reading" });
   }
 });
@@ -757,6 +765,7 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     const detection_id = detectionResult.rows[0].detection_id;
 
     if (image_base64) {
+      
       const imagePath = `/uploads/detection_${detection_id}.jpg`;
 
       await client.query(
@@ -769,7 +778,7 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
       message: "Detection processed",
       detection: detectionResult.rows[0],
     });
-  } catch (error) {
+  } catch {
     await client.query("ROLLBACK");
     res.status(500).json({ error: "Failed to process detection" });
   } finally {
@@ -884,7 +893,7 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
         notification_triggered: notificationCreated,
       },
     });
-  } catch (error) {
+  } catch {
     await client.query("ROLLBACK");
     res.status(500).json({ error: "Failed to process sensor fusion" });
   } finally {

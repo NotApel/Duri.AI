@@ -184,6 +184,7 @@ async function main() {
   assert.match(await page.locator("tbody").innerText(), /21 Oct 2026/);
   assert.match(await page.locator("tbody").innerText(), /02:05 am/i);
   await page.getByLabel("Detection type").selectOption("Durian");
+  await page.locator("tbody tr").first().waitFor();
   assert.equal(await page.locator("tbody tr").count(), 1);
   const csvEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV", exact: true }).click();
@@ -202,12 +203,9 @@ async function main() {
     .getByRole("link", { name: `View event ${first} on`, exact: false })
     .click();
   await page.getByText("Camera image unavailable.", { exact: false }).waitFor();
-  assert.equal(
-    await page
-      .locator(".d-measurements strong")
-      .allTextContents()
-      .then((values) => values.every((v) => v === "Unavailable")),
-    true,
+  assert.deepEqual(
+    await page.locator(".d-measurements strong").allTextContents(),
+    ["0", "0 Hz", "Unavailable"],
   );
   await page.getByLabel("Feedback category").selectOption("31");
   await page.getByRole("radio", { name: "No Durian", exact: true }).check();
@@ -343,7 +341,7 @@ async function main() {
   await page
     .getByText("This image could not be loaded.", { exact: false })
     .waitFor();
-  // Category failures and empty configurations disable submission, with retry.
+  // No Durian needs an available category; Durian remains available without one.
   await page.route("**/api/feedback-categories", (route) =>
     route.fulfill({
       status: 503,
@@ -354,11 +352,19 @@ async function main() {
   await page
     .getByRole("button", { name: "Retry categories", exact: true })
     .waitFor();
+  await page.getByRole("radio", { name: "No Durian", exact: true }).check();
   assert.equal(
     await page
       .getByRole("button", { name: "Submit feedback", exact: true })
       .isDisabled(),
     true,
+  );
+  await page.getByRole("radio", { name: "Durian", exact: true }).check();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Submit feedback", exact: true })
+      .isDisabled(),
+    false,
   );
   await page.unroute("**/api/feedback-categories");
   await page.route("**/api/feedback-categories", (route) =>
@@ -368,7 +374,7 @@ async function main() {
     .getByRole("button", { name: "Retry categories", exact: true })
     .click();
   await page
-    .getByText("No feedback categories are configured.", { exact: false })
+    .getByText("No categories are configured.", { exact: false })
     .waitFor();
   await page.unroute("**/api/feedback-categories");
   await page.reload();
@@ -424,7 +430,7 @@ async function main() {
     .waitFor();
   assert.equal(await page.locator("tbody tr").count(), 2);
   // Network and malformed data failures keep prior records explicitly stale.
-  await page.route("**/api/detections", (route) =>
+  await page.route("**/api/detections?*", (route) =>
     route.fulfill({
       status: 503,
       json: { error: "Test-only detections outage" },
@@ -445,16 +451,16 @@ async function main() {
       .isDisabled(),
     true,
   );
-  await page.unroute("**/api/detections");
-  await page.route("**/api/detections", (route) =>
+  await page.unroute("**/api/detections?*");
+  await page.route("**/api/detections?*", (route) =>
     route.fulfill({ json: { invalid: "not a list" } }),
   );
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page
     .getByRole("alert")
-    .filter({ hasText: "Displayed records may be stale" })
+    .filter({ hasText: "invalid detection history" })
     .waitFor();
-  await page.unroute("**/api/detections");
+  await page.unroute("**/api/detections?*");
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByRole("alert").waitFor({ state: "hidden" });
   for (const width of [320, 390, 1440]) {
@@ -487,17 +493,19 @@ async function main() {
   await page
     .getByRole("link", { name: `View event ${first} on`, exact: false })
     .waitFor();
-  await page.route("**/api/detections", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/detections?*", (route) =>
+    route.fulfill({ json: { items: [], next_cursor: null } }),
+  );
   await page.getByRole("button", { name: "Refresh logs", exact: true }).click();
   await page
     .getByText("No backend detections are available yet.", { exact: true })
     .waitFor();
   assert.equal(await page.locator("tbody tr").count(), 0);
-  await page.unroute("**/api/detections");
+  await page.unroute("**/api/detections?*");
   assert.ok(
     requests.some(
       (request) =>
-        request.url === `${api}/detections` &&
+        request.url.startsWith(`${api}/detections?`) &&
         request.authorization === `Bearer ${token}`,
     ),
   );

@@ -100,11 +100,25 @@ test("category IDs come from the server and the legacy boolean follows farmer cl
     feedbackPayload({ ...input, label: "DURIAN" }).correct_detection,
     true,
   );
+  assert.deepEqual(
+    feedbackPayload({
+      ...input,
+      label: "DURIAN",
+      categoryId: "",
+      comment: " ",
+    }),
+    {
+      farmer_id: "42",
+      category_id: null,
+      correct_detection: true,
+      comment_farmer: null,
+    },
+  );
+  assert.equal(feedbackPayload({ ...input, comment: "" }).comment_farmer, null);
   for (const changed of [
     { farmerId: null },
     { categoryId: "" },
     { label: "unsure" },
-    { comment: " " },
     { comment: "x".repeat(501) },
   ])
     assert.throws(() => feedbackPayload({ ...input, ...changed }));
@@ -170,4 +184,50 @@ test("feedback receipts are account-scoped and storage failures do not masquerad
     ),
     false,
   );
+});
+
+test("node location accepts equator coordinates and rejects incomplete or invented locations", () => {
+  const [located] = normalizeDetections([
+    {
+      ...row,
+      node_latitude: "0",
+      node_longitude: "101.5",
+      location_recorded_at: row.detection_at,
+    },
+  ]);
+  assert.deepEqual(located.location, [0, 101.5]);
+  for (const [lat, lon] of [
+    [null, 1],
+    [1, null],
+    [91, 10],
+    [0, 181],
+    [true, 1],
+    ["", 1],
+  ])
+    assert.equal(
+      normalizeDetections([
+        { ...row, node_latitude: lat, node_longitude: lon },
+      ])[0].location,
+      null,
+    );
+});
+test("server feedback without an optional category or comment remains an accepted assessment", () => {
+  const [event] = normalizeDetections([
+    {
+      ...row,
+      farmer_feedback: {
+        feedback_id: "10",
+        correct_detection: true,
+        category_id: null,
+        comment_farmer: null,
+        feedback_at: row.detection_at,
+      },
+    },
+  ]);
+  assert.equal(event.feedback.label, "DURIAN");
+  assert.equal(event.feedback.categoryId, null);
+  const storage = {
+    getItem: () => JSON.stringify({ [event.id]: event.feedback }),
+  };
+  assert.deepEqual(readReceipts("42", storage)[event.id], event.feedback);
 });

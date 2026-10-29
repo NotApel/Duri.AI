@@ -1,14 +1,12 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFarm } from "../services/FarmContext";
-import { saveBackendPlot } from "../services/farmApi";
+import { saveBackendPlot, deleteBackendRecord } from "../services/farmApi";
 import { FarmListState } from "./FarmControls";
 const blank = {
   farm_name: "",
   plot_name: "",
   plot_size: "",
-  latitude: "",
-  longitude: "",
 };
 export default function PlotManagement() {
   const {
@@ -35,8 +33,6 @@ export default function PlotManagement() {
     setDraft({
       ...plot,
       plot_size: plot.plot_size ?? "",
-      latitude: plot.latitude ?? "",
-      longitude: plot.longitude ?? "",
     });
     setMessage("");
     setError("");
@@ -62,6 +58,36 @@ export default function PlotManagement() {
       setDraft(null);
       setMessage("Plot saved by the backend.");
       backendPlots.refresh();
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      pending.current = false;
+      setSaving(false);
+    }
+  }
+  async function remove() {
+    if (
+      pending.current ||
+      unavailable ||
+      !window.confirm(
+        `Delete plot “${selected.plot_name}”? Plots with registered nodes cannot be deleted.`,
+      )
+    )
+      return;
+    setError("");
+    setMessage("");
+    if (mode === "simulation") {
+      if (dispatch({ type: "deletePlot", id: selected.plot_id }))
+        setMessage("Simulated plot deleted.");
+      return;
+    }
+    pending.current = true;
+    setSaving(true);
+    try {
+      await deleteBackendRecord("plots", selected.plot_id);
+      selectPlot("");
+      backendPlots.refresh();
+      setMessage("Plot deleted by the backend.");
     } catch (error) {
       setError(error.message);
     } finally {
@@ -182,32 +208,6 @@ export default function PlotManagement() {
                   }
                 />
               </label>
-              <div className="farm-coordinate-grid">
-                {[
-                  ["latitude", "Latitude", 90],
-                  ["longitude", "Longitude", 180],
-                ].map(([key, label, limit]) => (
-                  <label className="ui-field" htmlFor={key} key={key}>
-                    {label}
-                    <input
-                      id={key}
-                      required
-                      type="number"
-                      min={-limit}
-                      max={limit}
-                      step="any"
-                      value={draft[key]}
-                      onChange={(e) =>
-                        setDraft({ ...draft, [key]: e.target.value })
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
-              <p className="ui-muted">
-                Coordinates identify a plot reference point. They are not a
-                detected fruit location.
-              </p>
               <div className="ui-actions">
                 <button
                   className="ui-button primary"
@@ -245,13 +245,6 @@ export default function PlotManagement() {
                     : `${selected.plot_size} hectares`}
                 </dd>
               </div>
-              <div>
-                <dt>Plot reference · latitude / longitude</dt>
-                <dd>
-                  {selected.latitude ?? "Unavailable"},{" "}
-                  {selected.longitude ?? "Unavailable"}
-                </dd>
-              </div>
             </dl>
             <div className="ui-actions">
               <button
@@ -260,6 +253,13 @@ export default function PlotManagement() {
                 onClick={() => edit(selected)}
               >
                 Edit plot
+              </button>
+              <button
+                className="ui-button"
+                disabled={saving || unavailable}
+                onClick={remove}
+              >
+                Delete plot
               </button>
               <Link className="ui-button" to="/nodes">
                 Manage selected plot’s nodes

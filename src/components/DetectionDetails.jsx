@@ -70,7 +70,7 @@ export default function DetectionDetails({
       return;
     }
     const category = categories.rows.find((row) => row.id === categoryId);
-    if (!category) {
+    if ((label === "NOT_DURIAN" && !category) || (categoryId && !category)) {
       setError("Choose an available feedback category.");
       return;
     }
@@ -111,8 +111,8 @@ export default function DetectionDetails({
       // Keep the acknowledgement even if the farmer navigated away during POST.
       onSave(event.id, {
         label,
-        categoryId,
-        category: category.name,
+        categoryId: category?.id || null,
+        category: category?.name || "No category supplied",
         comment: comment.trim(),
         savedAt: result.feedback_at || new Date().toISOString(),
         feedbackId: String(result.feedback_id),
@@ -153,7 +153,11 @@ export default function DetectionDetails({
             </div>
             <div>
               <dt>Location</dt>
-              <dd>Unavailable · no device coordinates supplied</dd>
+              <dd>
+                {event.location
+                  ? `${event.location.join(", ")} · node location reported ${event.locationRecordedAt ? date(event.locationRecordedAt) : "at an unavailable time"}; exact fruit position unavailable`
+                  : "Unavailable · no device coordinates supplied"}
+              </dd>
             </div>
             <div>
               <dt>Model prediction · backend record</dt>
@@ -236,21 +240,12 @@ export default function DetectionDetails({
                 !categories.error &&
                 !categories.rows.length && (
                   <p className="d-notice">
-                    No feedback categories are configured. Ask the backend
-                    developer to provide them before submitting feedback.
+                    No categories are configured. Durian can be submitted
+                    without a category; No Durian needs an available category.
                   </p>
                 )}
               <form onSubmit={submit}>
-                <fieldset
-                  disabled={
-                    saving ||
-                    !online ||
-                    !available ||
-                    categories.loading ||
-                    Boolean(categories.error) ||
-                    !categories.rows.length
-                  }
-                >
+                <fieldset disabled={saving || !online || !available}>
                   <legend>How would you classify this event?</legend>
                   {Object.entries(labels).map(([value, text]) => (
                     <label
@@ -270,13 +265,21 @@ export default function DetectionDetails({
                   ))}
                   <label className="d-field" htmlFor="feedback-category">
                     Feedback category
+                    {label === "NOT_DURIAN"
+                      ? " (required for No Durian)"
+                      : " (optional)"}
                     <select
                       id="feedback-category"
-                      required
+                      disabled={categories.loading || Boolean(categories.error)}
+                      required={label === "NOT_DURIAN"}
                       value={categoryId}
                       onChange={(e) => setCategoryId(e.target.value)}
                     >
-                      <option value="">Choose a category</option>
+                      <option value="">
+                        {label === "NOT_DURIAN"
+                          ? "Choose a category"
+                          : "No category"}
+                      </option>
                       {categories.rows.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
@@ -285,10 +288,9 @@ export default function DetectionDetails({
                     </select>
                   </label>
                   <label className="d-field" htmlFor="feedback-comment">
-                    Detailed comments
+                    Detailed comments (optional)
                     <textarea
                       id="feedback-comment"
-                      required
                       maxLength={500}
                       rows={3}
                       value={comment}
@@ -305,7 +307,16 @@ export default function DetectionDetails({
                       onChange={(e) => setFile(e.target.files[0] || null)}
                     />
                   </label>
-                  <button className="d-primary" type="submit">
+                  <button
+                    className="d-primary"
+                    type="submit"
+                    disabled={
+                      label === "NOT_DURIAN" &&
+                      (categories.loading ||
+                        Boolean(categories.error) ||
+                        !categories.rows.length)
+                    }
+                  >
                     {saving ? "Submitting…" : "Submit feedback"}
                   </button>
                 </fieldset>

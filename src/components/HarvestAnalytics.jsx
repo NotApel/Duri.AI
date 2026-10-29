@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useDetections } from "../services/DetectionContext";
+import { fetchDetectionPage } from "../services/detectionApi";
 import { csvCell, detectionType } from "../services/detectionData";
 import "./Detections.css";
 
@@ -24,16 +24,55 @@ export default function HarvestAnalytics() {
   const [type, setType] = useState("");
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
-  const {
-    events: records,
-    loading,
-    error: loadError,
-    refresh,
-    loaded,
-  } = useDetections();
-  const events = records.filter(
-    (event) => !type || detectionType(event) === type,
-  );
+  const [cursors, setCursors] = useState([null]);
+  const [attempt, setAttempt] = useState(0);
+  const [result, setResult] = useState({
+    events: [],
+    nextCursor: null,
+    loading: true,
+    loaded: false,
+    error: "",
+  });
+  const cursor = cursors.at(-1);
+  const activeKey = `${type}:${cursor || ""}`;
+  const [resultKey, setResultKey] = useState("");
+  const active = useRef(null);
+  function refresh() {
+    setAttempt((value) => value + 1);
+  }
+  useEffect(() => {
+    const controller = new AbortController();
+    active.current = controller;
+    const timer = setTimeout(async () => {
+      setResult((previous) => ({ ...previous, loading: true, error: "" }));
+      try {
+        const page = await fetchDetectionPage({
+          cursor,
+          prediction: type,
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) {
+          setResult({ ...page, loading: false, loaded: true, error: "" });
+          setResultKey(activeKey);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setResult((previous) => ({
+            ...previous,
+            loading: false,
+            error: error.message,
+          }));
+      }
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [cursor, type, attempt, activeKey]);
+  const samePage = resultKey === activeKey;
+  const { loading, error: loadError, loaded, nextCursor } = result;
+  const events = samePage ? result.events : [];
+  const pageLoading = loading || (!samePage && !loadError);
   const rows = events.map((event) => [
     eventDate(event.time),
     eventTime(event.time),
@@ -55,7 +94,7 @@ export default function HarvestAnalytics() {
         doc.text("Duri.AI - backend harvest logs", 14, 18);
         doc.setFontSize(10);
         doc.text(
-          "Latest API records. All times are Malaysia time (MYT).",
+          "Current page only. All times are Malaysia time (MYT).",
           14,
           26,
         );
@@ -96,8 +135,8 @@ export default function HarvestAnalytics() {
         <div>
           <strong>Backend records</strong>
           <span>
-            Same records as Orchard Map · latest API results, currently up to
-            ten · all times in Malaysia time (MYT)
+            Backend detection history · 20 records per page · exports include
+            the current page · all times in Malaysia time (MYT)
           </span>
         </div>
       </div>
@@ -107,17 +146,20 @@ export default function HarvestAnalytics() {
           <select
             id="log-detection-type"
             value={type}
-            onChange={(event) => setType(event.target.value)}
+            onChange={(event) => {
+              active.current?.abort();
+              setType(event.target.value);
+              setCursors([null]);
+            }}
           >
             <option value="">All types</option>
-            {[...new Set(records.map(detectionType))].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
+            <option value="DURIAN">Durian</option>
+            <option value="NOT_DURIAN">Not durian</option>
           </select>
         </label>
         <button
           disabled={
-            loading || Boolean(loadError) || exporting || !events.length
+            pageLoading || Boolean(loadError) || exporting || !events.length
           }
           onClick={() => exportLogs("csv")}
         >
@@ -125,17 +167,17 @@ export default function HarvestAnalytics() {
         </button>
         <button
           disabled={
-            loading || Boolean(loadError) || exporting || !events.length
+            pageLoading || Boolean(loadError) || exporting || !events.length
           }
           onClick={() => exportLogs("pdf")}
         >
           {exporting ? "Preparing export…" : "Export PDF"}
         </button>
       </div>
-      <button className="ui-button" disabled={loading} onClick={refresh}>
+      <button className="ui-button" disabled={pageLoading} onClick={refresh}>
         Refresh logs
       </button>
-      {loading && (
+      {pageLoading && (
         <p className="ui-notice" role="status">
           Loading backend harvest logs…
         </p>
@@ -143,7 +185,7 @@ export default function HarvestAnalytics() {
       {loadError && (
         <div className="ui-notice ui-error" role="alert">
           {loadError}
-          {loaded ? " Displayed records may be stale." : ""}{" "}
+          {samePage && loaded ? " Displayed records may be stale." : ""}{" "}
           <button className="ui-button" onClick={refresh}>
             Try again
           </button>
@@ -190,14 +232,39 @@ export default function HarvestAnalytics() {
             ))}
           </tbody>
         </table>
-        {loaded && !loading && !loadError && !events.length && (
+        {loaded && !pageLoading && !loadError && !events.length && (
           <p className="p-6 text-center" role="status">
-            {records.length
+            {type
               ? "No detections match this type."
               : "No backend detections are available yet."}
           </p>
         )}
       </div>
+      <nav className="ui-actions" aria-label="Harvest log pages">
+        <button
+          className="ui-button"
+          disabled={pageLoading || cursors.length === 1}
+          onClick={() => {
+            active.current?.abort();
+            setCursors((previous) => previous.slice(0, -1));
+          }}
+        >
+          Previous page
+        </button>
+        <span aria-live="polite">Page {cursors.length}</span>
+        <button
+          className="ui-button"
+          disabled={
+            pageLoading || Boolean(loadError) || !samePage || !nextCursor
+          }
+          onClick={() => {
+            active.current?.abort();
+            setCursors((previous) => [...previous, nextCursor]);
+          }}
+        >
+          Next page
+        </button>
+      </nav>
     </section>
   );
 }
