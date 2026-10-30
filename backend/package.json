@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "node --require dotenv/config --test auth.test.cjs passwordRecovery.test.cjs priorities.test.cjs"
+    "test": "node --require dotenv/config --test auth.test.cjs passwordRecovery.test.cjs priorities.test.cjs cloudIntegration.test.cjs",
+    "gateway": "node scripts/gateway.cjs",
+    "simulate-event": "node scripts/simulate-event.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -18,7 +20,8 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.2.1",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
@@ -29,5 +32,8 @@
   "license": "ISC",
   "allowScripts": {
     "bcrypt@6.0.0": true
+  },
+  "engines": {
+    "node": "24.x"
   }
 }

@@ -59,7 +59,13 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       await login(username.trim(), password);
-      if (mounted.current) navigate("/dashboard", { replace: true });
+      if (mounted.current)
+        navigate(
+          /^\/map\/events\/[1-9]\d*$/.test(location.state?.from || "")
+            ? location.state.from
+            : "/dashboard",
+          { replace: true },
+        );
     } catch (err) {
       if (mounted.current) setError(err.message);
     } finally {

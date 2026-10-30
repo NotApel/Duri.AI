@@ -40,6 +40,7 @@ export function normalizeDetections(rows) {
     ids.add(id);
     return {
       id,
+      simulation: row.is_simulation === true,
       nodeId: recordId(row.node_id),
       plotId: recordId(row.plot_id),
       location: nodeLocation(row.node_latitude, row.node_longitude),
@@ -93,12 +94,12 @@ function normalizeFeedback(row, eventTime) {
   };
 }
 export function detectionType(event) {
-  return (
+  const type =
     event.prediction ||
     (["PENDING", "VERIFYING"].includes(event.status)
       ? "Awaiting verification"
-      : "Unknown")
-  );
+      : "Unknown");
+  return event.simulation ? `${type} (simulated)` : type;
 }
 export function normalizeCategories(rows) {
   if (!Array.isArray(rows))

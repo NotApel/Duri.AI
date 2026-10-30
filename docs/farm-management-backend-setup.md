@@ -1,3 +1,7 @@
+> Cloud deployment, Supabase images and push configuration are now documented in
+> [the cloud deployment guide](cloud-deployment.md); the Pi contract is in
+> [Raspberry Pi events](raspberry-pi-events.md).
+
 # Farm management, map locations, detections and training setup
 
 The farm management UI supports **Browser simulation** and **Backend records**.
@@ -99,8 +103,8 @@ time. There are no sample boundaries or fabricated pins. No locations produces a
 explicit empty state. Pins show the latest node location and timestamp, **not an
 exact fruit position or a historical GPS fix at detection time**. Old positions
 remain labelled with their report time; tiles still require an internet connection.
-Existing device API keys are shared credentials; per-device provisioning remains
-future IoT/backend work.
+These legacy location routes still use the shared device API key. Processed Pi
+events now use per-gateway credentials; see [the Pi event guide](raspberry-pi-events.md).
 
 ## Detection history and feedback
 

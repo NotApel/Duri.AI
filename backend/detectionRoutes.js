@@ -11,14 +11,26 @@ const {
   transaction,
 } = require("./apiHelpers");
 const evidence = `SELECT d.*,to_char(d.detection_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time,sn.node_id,sn.node_name,sn.plot_id,fp.plot_name,
-  sr.amplitude,sr.frequency,sr.duration,
+  sr.amplitude,sr.amplitude_unit,sr.frequency,sr.duration,
+  COALESCE((SELECT ge.is_simulation FROM gateway_event ge WHERE ge.detection_id=d.detection_id),FALSE) AS is_simulation,
   sn.latitude AS node_latitude,sn.longitude AS node_longitude,sn.location_recorded_at,
-  COALESCE((SELECT json_agg(json_build_object('image_id',di.image_id::text,'detection_id',di.detection_id::text,'image_path',di.image_path,'sequence_number',di.sequence_number,'is_selected',di.is_selected) ORDER BY di.sequence_number,di.image_id) FROM detection_image di WHERE di.detection_id=d.detection_id),'[]') AS images,
-  (SELECT row_to_json(f) FROM (SELECT df.feedback_id::text,df.category_id::text,df.correct_detection,df.comment_farmer,df.feedback_at,fc.category_name FROM detection_feedback df LEFT JOIN feedback_category fc ON fc.category_id=df.category_id
+  COALESCE((SELECT json_agg(json_build_object('image_id',di.image_id::text,'detection_id',di.detection_id::text,'image_path',di.image_path,'storage_bucket',di.storage_bucket,'storage_path',di.storage_path,'sequence_number',di.sequence_number,'is_selected',di.is_selected) ORDER BY di.sequence_number,di.image_id) FROM detection_image di WHERE di.detection_id=d.detection_id),'[]') AS images,
+  (SELECT row_to_json(f) FROM (SELECT df.feedback_id::text,df.category_id::text,df.correct_detection,df.comment_farmer,df.feedback_at,df.storage_bucket,df.storage_path,fc.category_name FROM detection_feedback df LEFT JOIN feedback_category fc ON fc.category_id=df.category_id
     WHERE df.detection_id=d.detection_id AND df.farmer_id=fp.farmer_id ORDER BY df.feedback_at DESC,df.feedback_id DESC LIMIT 1) f) AS farmer_feedback
   FROM detection d JOIN sensor_reading sr ON sr.reading_id=d.reading_id
   JOIN sensor_node sn ON sn.node_id=sr.node_id JOIN farm_plot fp ON fp.plot_id=sn.plot_id`;
-function createDetectionRoutes(pool, authenticate) {
+function createDetectionRoutes(
+  pool,
+  authenticate,
+  storage = require("./storage").createStorage(),
+) {
+  const signed = async (row, farmerId) => ({
+    ...row,
+    images: await storage.signRows(row.images, farmerId),
+    farmer_feedback: row.farmer_feedback?.storage_path
+      ? (await storage.signRows([row.farmer_feedback], farmerId))[0]
+      : row.farmer_feedback,
+  });
   const router = Router();
   router.use(["/detections", "/detection"], authenticate, (_req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -76,7 +88,10 @@ function createDetectionRoutes(pool, authenticate) {
         values,
       );
       const items = result.rows.slice(0, limit);
-      if (!paginated) return res.json(items);
+      const resolved = await Promise.all(
+        items.map((row) => signed(row, req.farmer.id)),
+      );
+      if (!paginated) return res.json(resolved);
       const last = items.at(-1);
       const next_cursor =
         result.rows.length > limit && last
@@ -84,7 +99,7 @@ function createDetectionRoutes(pool, authenticate) {
               JSON.stringify([last.cursor_time, last.detection_id]),
             ).toString("base64url")
           : null;
-      res.json({ items, next_cursor });
+      res.json({ items: resolved, next_cursor });
     }),
   );
   router.get(
@@ -96,7 +111,7 @@ function createDetectionRoutes(pool, authenticate) {
         [req.farmer.id, req.params.detectionId],
       );
       if (!rows.length) fail(404, "Detection not found.");
-      res.json(rows[0]);
+      res.json(await signed(rows[0], req.farmer.id));
     }),
   );
   router.get(
@@ -111,14 +126,16 @@ function createDetectionRoutes(pool, authenticate) {
         [req.params.detectionId, req.farmer.id],
       );
       if (!owned.rows.length) fail(404, "Detection not found.");
-      res.json(
-        (
-          await pool.query(
-            "SELECT * FROM detection_image WHERE detection_id=$1 ORDER BY sequence_number,image_id",
-            [req.params.detectionId],
-          )
-        ).rows,
-      );
+      const images = (
+        await pool.query(
+          "SELECT * FROM detection_image WHERE detection_id=$1 ORDER BY sequence_number,image_id",
+          [req.params.detectionId],
+        )
+      ).rows;
+      const result = await storage.signRows(images, req.farmer.id);
+      if (result.some((row) => row.image_error))
+        fail(503, "Image access is temporarily unavailable. Please retry.");
+      res.json(result);
     }),
   );
   // Keep the dedicated feedback endpoint introduced on feature/seed-data.
@@ -137,7 +154,7 @@ function createDetectionRoutes(pool, authenticate) {
       if (!rows[0].farmer_feedback)
         fail(404, "No feedback found for this detection.");
       res.json({
-        ...rows[0].farmer_feedback,
+        ...(await signed(rows[0], req.farmer.id)).farmer_feedback,
         detection_id: req.params.detectionId,
         farmer_id: String(req.farmer.id),
       });
@@ -242,7 +259,26 @@ function createDetectionRoutes(pool, authenticate) {
             "INSERT INTO training_queue (feedback_id,queue_status) VALUES ($1,'PENDING')",
             [saved.feedback_id],
           );
-          if (image) {
+          if (image && storage.configured) {
+            const decoded = require("./eventValidation").decodeImage(
+              {
+                content_type: image[0] === 137 ? "image/png" : "image/jpeg",
+                data_base64: image.toString("base64"),
+                captured_at: new Date().toISOString(),
+              },
+              0,
+            );
+            const object = await storage.upload({
+              farmerId: req.farmer.id,
+              gatewayId: "feedback",
+              eventId: req.params.detectionId,
+              image: decoded,
+            });
+            await client.query(
+              "UPDATE detection_feedback SET storage_bucket=$1,storage_path=$2,content_sha256=$3 WHERE feedback_id=$4",
+              [object.bucket, object.path, object.sha256, saved.feedback_id],
+            );
+          } else if (image) {
             const dir = path.join(__dirname, "feedback_images");
             await mkdir(dir, { recursive: true });
             imagePath = path.join(

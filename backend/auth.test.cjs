@@ -89,6 +89,13 @@ before(async () => {
     cwd: __dirname,
     env: {
       ...process.env,
+      NODE_ENV: "test",
+      DATABASE_URL: "",
+      DB_SSL: "false",
+      PUSH_ENABLED: "false",
+      PUSH_WORKER_DISABLED: "true",
+      SUPABASE_URL: "",
+      SUPABASE_SERVICE_ROLE_KEY: "",
       DB_HOST: config.host,
       DB_PORT: String(config.port),
       DB_USER: config.user,

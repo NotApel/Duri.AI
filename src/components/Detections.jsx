@@ -289,7 +289,9 @@ export default function Detections({ mode = "map" }) {
               >
                 <div className="d-event-body">
                   <div className="d-event-top">
-                    <span className="d-event-id">Event #{item.id}</span>
+                    <span className="d-event-id">
+                      {item.simulation ? "Simulation · " : ""}Event #{item.id}
+                    </span>
                     <Badge status={item.status} />
                   </div>
                   <h2>

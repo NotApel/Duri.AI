@@ -92,6 +92,13 @@ before(async () => {
     cwd: __dirname,
     env: {
       ...process.env,
+      NODE_ENV: "test",
+      DATABASE_URL: "",
+      DB_SSL: "false",
+      PUSH_ENABLED: "false",
+      PUSH_WORKER_DISABLED: "true",
+      SUPABASE_URL: "",
+      SUPABASE_SERVICE_ROLE_KEY: "",
       DB_HOST: configuration.host,
       DB_PORT: String(configuration.port),
       DB_USER: configuration.user,
@@ -115,7 +122,9 @@ before(async () => {
   while (Date.now() < deadline) {
     try {
       if ((await fetch(`${base}/api/health`)).ok) break;
-    } catch {}
+    } catch {
+      // The local test server may not be listening yet.
+    }
     await new Promise((resolve) => setTimeout(resolve, 30));
   }
   const registered = await request("/auth/register", account);

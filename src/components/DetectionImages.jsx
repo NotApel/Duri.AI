@@ -18,8 +18,15 @@ export default function DetectionImages({ event }) {
       setResult({ images: [], loading: true, error: "" });
       try {
         const rows =
-          event.images ??
-          (await fetchDetectionImages(event.id, { signal: controller.signal }));
+          !attempt && Array.isArray(event.images)
+            ? event.images
+            : await fetchDetectionImages(event.id, {
+                signal: controller.signal,
+              });
+        if (Array.isArray(rows) && rows.some((row) => row.image_error))
+          throw new Error(
+            "Image access is temporarily unavailable. Please retry.",
+          );
         const images = normalizeImages(rows, API_URL);
         if (!controller.signal.aborted)
           setResult({ images, loading: false, error: "" });
@@ -61,7 +68,13 @@ export default function DetectionImages({ event }) {
                   This image could not be loaded. The image may be missing or
                   access may be unavailable.
                 </p>
-                <button className="ui-button" onClick={() => setBroken({})}>
+                <button
+                  className="ui-button"
+                  onClick={() => {
+                    setBroken({});
+                    setAttempt((value) => value + 1);
+                  }}
+                >
                   Retry image
                 </button>
               </div>

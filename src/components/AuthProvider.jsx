@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setPushAccount, clearLocalPush } from "../services/pwa";
 import { AuthContext } from "../services/AuthContext";
 import { getSession, loginFarmer, logoutFarmer } from "../services/api";
 
@@ -58,6 +59,9 @@ export default function AuthProvider({ children }) {
       window.removeEventListener("pageshow", onFocus);
     };
   }, [refresh, invalidate]);
+  useEffect(() => {
+    if (!checking) setPushAccount(farmer?.farmer_id || null).catch(() => {});
+  }, [farmer?.farmer_id, checking]);
   async function login(username, password) {
     const result = await loginFarmer(username, password);
     ++revision.current;
@@ -69,6 +73,7 @@ export default function AuthProvider({ children }) {
   }
   async function logout() {
     await logoutFarmer();
+    await clearLocalPush().catch(() => {});
     ++revision.current;
     setSignedOut(true);
     setFarmer(null);
