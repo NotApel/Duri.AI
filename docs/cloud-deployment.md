@@ -1,4 +1,4 @@
-# Deploy Duri.AI: Railway, Supabase and Vercel
+# Deploy Duri.AI: Render, Supabase and Vercel
 
 The implementation preserves the existing React/Vite and Express/`pg` stack.
 Web Push adds the `web-push` dependency; Supabase Storage uses its HTTPS REST API.
@@ -11,7 +11,7 @@ is introduced. Node.js **24.x** is pinned in both packages.
    only, apply the repository table files in their documented foreign-key order.
    Do not run seed/TRUNCATE scripts against an existing or production database.
 2. Copy a server PostgreSQL connection URL from Supabase's Connect panel. Use an
-   IPv4-compatible session-pooler address if Railway cannot reach a direct IPv6
+   IPv4-compatible session-pooler address if Render cannot reach a direct IPv6
    database address. Keep connection credentials out of frontend settings.
 3. The backend accepts `DATABASE_URL` first; existing local `DB_*` settings remain
    supported when it is blank. Set `DB_SSL=true` for Supabase and production.
@@ -47,19 +47,54 @@ logged. The viewer can request fresh metadata after expiry/failure. Existing
 legacy image URLs remain readable when actually reachable; local `/uploads/...`
 placeholders are not magically converted into stored Supabase images.
 
-## 2. Railway backend
+## 2. Render backend
 
-Create a service from this repository and configure:
+1. Sign in at [Render](https://dashboard.render.com/) and choose **New → Web Service**.
+2. Connect GitHub and select `NotApel/Duri.AI`. Allow repository access if it is
+   not listed. Select the branch containing this configuration; use `main` after
+   merging the Render configuration pull request.
+3. Use the settings below. Choose a region near your Supabase database. Singapore
+   is suitable when the database is also hosted there.
 
-- Root directory: `/backend`.
-- Config file: `/backend/railway.json`.
-- Install/build: Railway Railpack with `npm ci`, Node 24.
-- Start: `npm start`. Railway supplies `PORT`; the app listens on `0.0.0.0`.
-- Health check: `/api/health`, after startup migrations.
-- Keep the backend running for the PostgreSQL outbox poller; do not enable a
-  sleeping/serverless setup if prompt background delivery is required.
+   | Setting            | Value                                                      |
+   | ------------------ | ---------------------------------------------------------- |
+   | Service type       | Web Service                                                |
+   | Runtime / Language | Node                                                       |
+   | Root Directory     | `backend`                                                  |
+   | Build Command      | `npm ci`                                                   |
+   | Start Command      | `npm start`                                                |
+   | Node version       | `24.x`, from `backend/package.json`                        |
+   | Health Check Path  | `/api/health`                                              |
+   | Instance type      | An always-running paid instance for prompt background push |
 
-Set backend-only variables through Railway's secret environment settings:
+4. Add the environment variables below before creating the service. Render
+   supplies `PORT`; the app listens on `0.0.0.0`. Do not hard-code a different
+   listening port or configure this Express backend as a Static Site.
+5. Click **Create Web Service**, then inspect the deployment logs. Startup applies
+   migrations before listening. A database, TLS, JWT, Storage configuration or
+   migration error must be resolved before the health check can pass.
+6. Copy the generated `https://your-api.onrender.com` address. Open
+   `https://your-api.onrender.com/api/health` and confirm status `OK`. Use your
+   actual address as Vercel's `VITE_API_URL`, with `/api` appended, then redeploy
+   the frontend.
+7. Set `FRONTEND_ORIGINS` and `FRONTEND_URL` to your actual Vercel production
+   origin, then redeploy the backend. Preserve any other required exact origins
+   in the comma-separated CORS list. Test login from the deployed Vercel app.
+
+The repository-root `render.yaml` also supports **New → Blueprint** after its
+branch is available on GitHub. It describes the same backend and uses Render's
+**Starter paid instance**; review the current price before applying it. Secret
+fields prompt for values instead of storing them in Git. Push starts disabled in
+this blueprint: add the three VAPID values and set `PUSH_ENABLED=true` to enable
+it. An already deployed service must have its settings updated in Render; adding
+this file alone does not reconfigure a manually created service.
+
+A free service can demonstrate the web app, but it can sleep while idle. Pending
+push jobs cannot be processed during sleep; new requests may have to wait for a
+cold start. Use an always-running instance for harvest alerts. Images are kept
+in Supabase Storage rather than Render's ephemeral local filesystem.
+
+Set backend-only variables through Render's secret environment settings:
 
 ```dotenv
 NODE_ENV=production
@@ -87,10 +122,10 @@ cd backend
 npx web-push generate-vapid-keys
 ```
 
-Retain SMTP variables from the password-recovery guide. Add the Railway API's HTTPS
-hostname. `FRONTEND_URL` is used for password-reset links; frontend/API may have
+Retain SMTP variables from the password-recovery guide. Use the generated Render
+API HTTPS hostname when configuring the frontend. `FRONTEND_URL` is used for password-reset links; frontend/API may have
 separate origins. Add exact additional frontend origins only when needed; no
-wildcard credentialed CORS. The production proxy setting trusts one Railway proxy
+wildcard credentialed CORS. The production proxy setting trusts one Render proxy
 hop; do not expose that setting on a directly accessible untrusted proxy chain.
 
 `DEVICE_API_KEY` supports legacy device routes during migration. New Pi events
@@ -102,7 +137,7 @@ hardware or install firmware.
 
 - Root: repository root; framework: Vite.
 - Install: `npm ci`; build: `npm run build`; output: `dist`.
-- Public environment variable: `VITE_API_URL=https://your-api.up.railway.app/api`.
+- Public environment variable: `VITE_API_URL=https://your-api.onrender.com/api`.
 - Redeploy after changing this build-time value. The build rejects invalid API
   configuration; remote production pages require HTTPS. HTTP loopback is allowed
   for local preview, not a Vercel deployment.
@@ -144,7 +179,7 @@ seconds and claims up to five jobs using 60-second database leases; provider
 requests time out after 10 seconds. Retries use 1/5/15/60-minute backoff, respect
 Retry-After, stop after five claims, and expire after 24 hours. Provider 404/410
 removes the dead subscription. Other permanent failures stop retrying. Multiple
-Railway instances can claim safely. Failed SQL acknowledgements/crashes can cause
+Render instances can claim safely. Failed SQL acknowledgements/crashes can cause
 provider re-delivery: delivery is at least once, with a stable event notification
 tag and `renotify:false` to reduce duplicate banners. Database events and in-app
 notifications are deduplicated independently of push-provider delivery.
@@ -159,11 +194,11 @@ synchronization is outside this release.
 The merged syntax errors/duplicate route definitions are reconciled into the
 existing modules. Weekly and manual retraining use the same configured worker.
 Manual successful starts are limited to three per authenticated farmer per day;
-the weekly schedule defaults to Sunday 02:00 in Asia/Kuala_Lumpur. Configure
+the weekly schedule defaults to Sunday 02:00 in Asia/Kuala_Lumpur (Malaysia time). Configure
 `PYTHON_PATH` and `RETRAIN_SCRIPT_PATH` only when the actual external program exists
 in the deployment. `AUTO_RETRAIN_ENABLED=false` disables the schedule. Windows
 paths are not cloud defaults. No training script/model evaluation was fabricated.
-A Node-only Railway installation reports training unavailable until configured.
+A Node-only Render installation reports training unavailable until configured.
 Scheduled training across multiple replicas still needs dedicated durable job
 orchestration before running a shared real model pipeline; keep training enabled
 on only one instance. The push outbox already supports multiple replicas.
@@ -191,8 +226,8 @@ farmer saw an alert.
    an actual Android device and desktop browser, send one simulated event, and
    retry its identical ID. Verify one event/in-app notification, signed-image
    access, background delivery, click-through, logout and expired subscriptions.
-4. Test a Railway restart while a push is pending and a Storage outage during a
+4. Test a Render restart while a push is pending and a Storage outage during a
    Pi upload. Existing database records must remain intact.
-5. Real Supabase credentials, Railway/Vercel hosting, OS/browser background delivery
+5. Real Supabase credentials, Render/Vercel hosting, OS/browser background delivery
    and physical ESP32/Pi capture/inference require this staging verification. Local
    emulator tests do not prove those external services/hardware are connected.

@@ -20,7 +20,7 @@ npm run gateway -- revoke --gateway-id YOUR_GATEWAY_UUID
 
 Omit `--simulation` only for a real gateway. The command returns the gateway ID and
 one credential once. Store it securely on the Pi, outside source control. Do not
-run provisioning as the Railway startup command or publish its output to logs.
+run provisioning as the Render startup command or publish its output to logs.
 The database retains only a SHA-256 credential hash. Rotation keeps gateway/event
 IDs stable, so previously recorded events can still be acknowledged on retry.
 Revocation immediately blocks new authenticated requests. Assignment permits

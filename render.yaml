@@ -1,0 +1,37 @@
+# Render Blueprint: Node backend only. Vercel hosts the frontend.
+# Starter is a paid, always-running instance for the PostgreSQL push worker.
+services:
+  - type: web
+    name: duri-ai-backend
+    runtime: node
+    plan: starter
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_SSL
+        value: "true"
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: harvest-images
+      # Add VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT in Render,
+      # then set PUSH_ENABLED=true. Never commit their values here.
+      - key: PUSH_ENABLED
+        value: "false"
