@@ -1,4 +1,4 @@
-// Production must explicitly target the HTTPS Railway API; localhost remains convenient in development.
+// Production must explicitly target the HTTPS backend API; localhost remains convenient in development.
 if (import.meta.env?.PROD) {
   try {
     const url = new URL(import.meta.env.VITE_API_URL);

@@ -23,12 +23,12 @@ script completion does not prove improved accuracy or successful OTA deployment.
 - **Frontend:** React, Vite, React Router, Tailwind/CSS, Leaflet and service workers.
 - **Backend:** Node.js/Express, `pg`, SQL migrations, JWT sessions, Nodemailer and
   `web-push`. Existing training scheduling uses `node-cron`.
-- **Hosting:** Railway backend, Supabase PostgreSQL/private Storage, Vercel frontend.
+- **Hosting:** Render backend, Supabase PostgreSQL/private Storage, Vercel frontend.
 
 ## System architecture
 
 ```text
-ESP32 sensors → Raspberry Pi 4 processing → Node.js REST API on Railway
+ESP32 sensors → Raspberry Pi 4 processing → Node.js REST API on Render
                                             ├─ Supabase PostgreSQL
                                             ├─ Supabase private Storage
                                             └─ Web Push providers → farmer browser
@@ -84,7 +84,7 @@ after a successful reset. The login layout and existing authentication remain.
 
 ## Cloud event and notification integration
 
-ESP32 → Raspberry Pi 4 → Node.js on Railway → Supabase PostgreSQL/private Storage
+ESP32 → Raspberry Pi 4 → Node.js on Render → Supabase PostgreSQL/private Storage
 → Vercel PWA. See [cloud deployment and Web Push](docs/cloud-deployment.md) and
 [Pi event contract, provisioning and simulation](docs/raspberry-pi-events.md).
 Existing login, farm management, logs and feedback remain in the current app.

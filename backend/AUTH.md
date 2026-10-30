@@ -9,7 +9,7 @@ Follow [the current authentication guide](../docs/authentication.md) for local
 setup, migration compatibility, API contracts and verification. It supersedes the
 older cookie/scrypt-only setup instructions previously in this file.
 
-For Railway, Supabase PostgreSQL/private Storage, Vercel and Web Push, follow
+For Render, Supabase PostgreSQL/private Storage, Vercel and Web Push, follow
 [the cloud deployment guide](../docs/cloud-deployment.md). The backend now accepts
 `DATABASE_URL` first, with existing `DB_*` settings as a fallback. Supabase and
 production require verified database TLS. All private credentials stay in the
