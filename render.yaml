@@ -1,4 +1,4 @@
-# Render Blueprint: Node backend only. Vercel hosts the frontend.
+# Render Blueprint: Node backend only. Cloudflare Workers Static Assets hosts the frontend.
 # Starter is a paid, always-running instance for the PostgreSQL push worker.
 services:
   - type: web

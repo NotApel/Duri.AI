@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
-const { readFile, rm } = require("node:fs/promises");
+const { readFile, writeFile, mkdir, rm } = require("node:fs/promises");
 const { randomUUID, randomBytes, createECDH } = require("node:crypto");
 const path = require("node:path");
 const { chromium } = require("playwright");
@@ -21,7 +21,9 @@ async function main() {
   const keys = webPush.generateVAPIDKeys(),
     webPort = await freePort(),
     base = `http://127.0.0.1:${webPort}`;
+  const useWrangler = process.env.PWA_SERVER === "wrangler";
   const outputDir = `/tmp/duri-cloud-pwa-${process.pid}`;
+  const runtimeDir = `${outputDir}-runtime`;
   let fixture, browser, frontend;
   try {
     fixture = await backendFixture({
@@ -91,7 +93,12 @@ async function main() {
       ["node_modules/vite/bin/vite.js", "build", "--outDir", outputDir],
       {
         cwd: fixture.root,
-        env: { ...process.env, VITE_API_URL: fixture.base },
+        env: {
+          ...process.env,
+          WORKERS_CI: "",
+          VERCEL: "",
+          VITE_API_URL: fixture.base,
+        },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -100,9 +107,38 @@ async function main() {
     build.stderr.on("data", (data) => (logs += data));
     const [code] = await once(build, "exit");
     assert.equal(code, 0, logs);
-    frontend = spawn(
-      process.execPath,
-      [
+    let serverArgs;
+    if (useWrangler) {
+      const config = JSON.parse(
+        await readFile(path.join(fixture.root, "wrangler.jsonc"), "utf8"),
+      );
+      // Keep the tested asset policy, but isolate output/state from the repository.
+      const settings = { ...config };
+      delete settings.env;
+      await mkdir(runtimeDir, { recursive: true });
+      const configPath = path.join(runtimeDir, "wrangler.test.json");
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          ...settings,
+          assets: { ...settings.assets, directory: outputDir },
+        }),
+      );
+      serverArgs = [
+        "node_modules/wrangler/bin/wrangler.js",
+        "dev",
+        "--local",
+        "--ip",
+        "127.0.0.1",
+        "--port",
+        String(webPort),
+        "--config",
+        configPath,
+        "--persist-to",
+        path.join(runtimeDir, "state"),
+      ];
+    } else {
+      serverArgs = [
         "node_modules/vite/bin/vite.js",
         "preview",
         "--host",
@@ -112,16 +148,101 @@ async function main() {
         "--strictPort",
         "--outDir",
         outputDir,
-      ],
-      {
-        cwd: fixture.root,
-        env: { ...process.env, VITE_API_URL: fixture.base },
-        stdio: ["ignore", "pipe", "pipe"],
+      ];
+    }
+    frontend = spawn(process.execPath, serverArgs, {
+      cwd: fixture.root,
+      env: {
+        ...process.env,
+        VITE_API_URL: fixture.base,
+        WRANGLER_SEND_METRICS: "false",
+        WRANGLER_LOG_PATH: path.join(runtimeDir, "logs"),
+        XDG_CONFIG_HOME: path.join(runtimeDir, "config"),
       },
-    );
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     frontend.stdout.on("data", (data) => (logs += data));
     frontend.stderr.on("data", (data) => (logs += data));
     await waitReady(base, () => logs);
+    // The API is cross-origin even in the real browser workflow.
+    const preflight = await fetch(`${fixture.base}/auth/login`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: base,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization,content-type",
+      },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), base);
+    assert.equal(
+      preflight.headers.get("access-control-allow-credentials"),
+      "true",
+    );
+    const denied = await fetch(`${fixture.base}/auth/login`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://unlisted.example.invalid",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+    assert.equal(denied.headers.get("access-control-allow-origin"), null);
+    if (useWrangler) {
+      const worker = await fetch(`${base}/sw.js`);
+      assert.match(worker.headers.get("content-type"), /javascript/);
+      assert.match(worker.headers.get("cache-control"), /no-store/);
+      assert.equal(worker.headers.get("service-worker-allowed"), "/");
+      const script = await worker.text();
+      assert.ok(
+        !script.includes("__BUILD__") && !script.includes("__DURI_PRECACHE__"),
+      );
+      const precache = JSON.parse(
+        script.match(/const PRECACHE\s*=\s*(\[[\s\S]*?\]);/)[1],
+      );
+      for (const assetPath of precache) {
+        const response = await fetch(`${base}${assetPath}`);
+        assert.equal(
+          response.status,
+          200,
+          `Missing precached asset: ${assetPath}`,
+        );
+        const type = response.headers.get("content-type");
+        if (assetPath.endsWith(".js")) assert.match(type, /javascript/);
+        if (assetPath.endsWith(".css")) assert.match(type, /text\/css/);
+        if (assetPath.endsWith(".png")) assert.match(type, /image\/png/);
+      }
+      const manifest = await fetch(`${base}/manifest.webmanifest`);
+      assert.match(manifest.headers.get("content-type"), /json|manifest/);
+      assert.match(manifest.headers.get("cache-control"), /no-cache/);
+      for (const icon of (await manifest.json()).icons) {
+        const response = await fetch(`${base}${icon.src}`);
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get("content-type"), /image\/png/);
+      }
+      const entry = (
+        await readFile(path.join(outputDir, "index.html"), "utf8")
+      ).match(/src="([^"]+\.js)"/)[1];
+      const asset = await fetch(`${base}${entry}`);
+      assert.match(asset.headers.get("content-type"), /javascript/);
+      assert.match(asset.headers.get("cache-control"), /immutable/);
+      for (const route of [
+        "/login",
+        "/register",
+        "/dashboard",
+        "/map",
+        `/map/events/${id}`,
+        "/analytics",
+        "/settings",
+        "/reset-password",
+      ]) {
+        const response = await fetch(`${base}${route}`, {
+          headers: { "Sec-Fetch-Mode": "navigate" },
+        });
+        assert.equal(response.status, 200);
+        assert.match(await response.text(), /id="root"/);
+      }
+    }
+
     browser = await chromium.launch({
       executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
       args: ["--no-sandbox"],
@@ -482,7 +603,7 @@ async function main() {
     }
     assert.deepEqual(errors, []);
     console.log(
-      "PASS built PWA installation assets, real Storage image rendering/refresh, authenticated event deep link, consent-only push enable/disable, farmer/session subscription ownership, synthetic service-worker push, logout suppression, public-only offline shell and 320/390/1440 Settings. Browser subscription/provider delivery were simulated.",
+      `PASS ${useWrangler ? "Wrangler Static Assets" : "Vite preview"}: built PWA installation assets, real Storage image rendering/refresh, authenticated event deep link, consent-only push enable/disable, farmer/session subscription ownership, synthetic service-worker push, logout suppression, public-only offline shell and 320/390/1440 Settings. Browser subscription/provider delivery were simulated.`,
     );
   } catch (error) {
     if (browser)
@@ -509,6 +630,7 @@ async function main() {
     if (fixture) await fixture.close();
     await storage.close();
     await rm(outputDir, { recursive: true, force: true });
+    await rm(runtimeDir, { recursive: true, force: true });
   }
 }
 main().catch((error) => {

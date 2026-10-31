@@ -1,4 +1,4 @@
-# Deploy Duri.AI: Render, Supabase and Vercel
+# Deploy Duri.AI: Render, Supabase and Cloudflare
 
 The implementation preserves the existing React/Vite and Express/`pg` stack.
 Web Push adds the `web-push` dependency; Supabase Storage uses its HTTPS REST API.
@@ -75,11 +75,11 @@ placeholders are not magically converted into stored Supabase images.
    migration error must be resolved before the health check can pass.
 6. Copy the generated `https://your-api.onrender.com` address. Open
    `https://your-api.onrender.com/api/health` and confirm status `OK`. Use your
-   actual address as Vercel's `VITE_API_URL`, with `/api` appended, then redeploy
+   actual address as the frontend's `VITE_API_URL`, with `/api` appended, then redeploy
    the frontend.
-7. Set `FRONTEND_ORIGINS` and `FRONTEND_URL` to your actual Vercel production
+7. Set `FRONTEND_ORIGINS` and `FRONTEND_URL` to your actual frontend production
    origin, then redeploy the backend. Preserve any other required exact origins
-   in the comma-separated CORS list. Test login from the deployed Vercel app.
+   in the comma-separated CORS list. Test login from the deployed frontend app.
 
 The repository-root `render.yaml` also supports **New → Blueprint** after its
 branch is available on GitHub. It describes the same backend and uses Render's
@@ -102,8 +102,8 @@ DATABASE_URL=<Supabase server PostgreSQL connection URL>
 DB_SSL=true
 DB_POOL_MAX=5
 JWT_SECRET=<existing strong signing secret>
-FRONTEND_URL=https://your-app.vercel.app
-FRONTEND_ORIGINS=https://your-app.vercel.app
+FRONTEND_URL=https://duri-ai.YOUR_SUBDOMAIN.workers.dev
+FRONTEND_ORIGINS=https://duri-ai.YOUR_SUBDOMAIN.workers.dev
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<backend-only service role key>
 SUPABASE_STORAGE_BUCKET=harvest-images
@@ -133,23 +133,13 @@ must use provisioned per-gateway Bearer credentials. Remove the shared legacy ke
 when old producers have migrated. Registration does not provision physical
 hardware or install firmware.
 
-## 3. Vercel frontend
+## 3. Cloudflare frontend
 
-- Root: repository root; framework: Vite.
-- Install: `npm ci`; build: `npm run build`; output: `dist`.
-- Public environment variable: `VITE_API_URL=https://your-api.onrender.com/api`.
-- Redeploy after changing this build-time value. The build rejects invalid API
-  configuration; remote production pages require HTTPS. HTTP loopback is allowed
-  for local preview, not a Vercel deployment.
-- `vercel.json` supplies the SPA fallback for direct event links and leaves assets,
-  icons, manifest, API paths and `/sw.js` out of that fallback.
-- The service worker is served without stale HTTP caching. Public build assets are
-  versioned/pre-cached; old owned caches are removed on activation. Updates wait
-  rather than forcibly reloading a farmer's form; closing all controlled tabs lets
-  the new version activate.
-
-Never define database, Storage-service, Pi or VAPID private credentials using a
-`VITE_` prefix. This frontend does not need a Supabase service/anon key.
+Follow [Cloudflare Workers Static Assets setup](cloudflare-workers.md) for the
+production/staging build commands, Wrangler configuration, public API URL,
+cache headers and Render CORS changes. The backend and Supabase settings above
+remain the same. Existing `vercel.json` remains available for the previous host
+during migration; it does not configure Cloudflare.
 
 ## 4. Push and account behaviour
 
@@ -228,6 +218,6 @@ farmer saw an alert.
    access, background delivery, click-through, logout and expired subscriptions.
 4. Test a Render restart while a push is pending and a Storage outage during a
    Pi upload. Existing database records must remain intact.
-5. Real Supabase credentials, Render/Vercel hosting, OS/browser background delivery
+5. Real Supabase credentials, Render/Cloudflare hosting, OS/browser background delivery
    and physical ESP32/Pi capture/inference require this staging verification. Local
    emulator tests do not prove those external services/hardware are connected.
