@@ -72,8 +72,11 @@ credentials in its build integration or your local CLI configuration, not Git.
 ## 3. Local preview and CLI deployment
 
 For local development, copy `.env.example` to `.env.local` and keep using
-`npm run dev`. Local environment files remain ignored; the previous tracked
-`.env.local` is removed from Git tracking while the local copy is preserved.
+`npm run dev`. Local environment files remain ignored. This migration stops
+tracking the previously committed `.env.local`; its copy in the implementation
+workspace is preserved. **Before pulling into another existing checkout, back up
+your `.env.local`**, because Git may remove that formerly tracked file during the
+update. Restore your local copy after pulling; it will then be ignored.
 
 For a local production build, create an ignored `.env.cloudflare.local` file:
 
