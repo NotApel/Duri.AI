@@ -47,6 +47,7 @@ function databaseConfig(env = process.env) {
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
     keepAlive: true,
+    options: "-c search_path=public",
   };
 }
 module.exports = { databaseConfig };
