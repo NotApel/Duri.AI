@@ -7,12 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:cloudflare": "vite build --mode cloudflare",
+    "build:cloudflare:staging": "vite build --mode cloudflare-staging",
+    "cf:preview": "wrangler dev --local --env=\"\"",
+    "cf:deploy": "npm run build:cloudflare && wrangler deploy --env=\"\"",
+    "cf:deploy:staging": "npm run build:cloudflare:staging && wrangler deploy --env staging"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
-    "express-rate-limit": "^8.7.1",
     "bcrypt": "^6.0.0",
+    "express-rate-limit": "^8.7.1",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
@@ -36,7 +41,8 @@
     "globals": "^17.6.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "wrangler": "^4.156.0"
   },
   "engines": {
     "node": "24.x"

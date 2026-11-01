@@ -2,6 +2,9 @@
 node_modules/
 dist/
 dist-ssr/
+.wrangler/
+.dev.vars
+.dev.vars.*
 
 # Local environment files; keep safe configuration examples trackable
 .env

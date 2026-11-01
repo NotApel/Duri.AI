@@ -41,10 +41,17 @@ export default defineConfig(({ command, mode }) => {
     const env = { ...loadEnv(mode, root, "VITE_"), ...process.env };
     try {
       const url = new URL(env.VITE_API_URL);
+      const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+        url.hostname,
+      );
       const local =
-        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) &&
-        !process.env.VERCEL;
+        loopback &&
+        !process.env.VERCEL &&
+        !process.env.WORKERS_CI &&
+        !mode.startsWith("cloudflare");
       if (
+        !["http:", "https:"].includes(url.protocol) ||
+        (loopback && !local) ||
         (!local && url.protocol !== "https:") ||
         url.username ||
         url.password ||
