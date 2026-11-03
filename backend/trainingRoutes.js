@@ -43,9 +43,12 @@ function createTrainingRoutes(pool, authenticate) {
         finished_at: new Date().toISOString(),
       };
     };
-    try {
+     try {
+      console.log("Checking Python at:", process.env.PYTHON_PATH);
+      console.log("Checking Script at:", process.env.RETRAIN_SCRIPT_PATH);
       await access(process.env.PYTHON_PATH, constants.X_OK);
       await access(process.env.RETRAIN_SCRIPT_PATH, constants.R_OK);
+      
       const child = spawn(
         process.env.PYTHON_PATH,
         [process.env.RETRAIN_SCRIPT_PATH],
@@ -65,7 +68,8 @@ function createTrainingRoutes(pool, authenticate) {
             : "The training script failed. Run the configured script directly to inspect its errors.",
         ),
       );
-    } catch {
+    } catch (error) {
+      console.error("ACCESS ERROR DETAILS:", error.message); // <--- TAMBAH BARIS INI
       finish(
         "failed",
         "The configured training executable or script is unavailable.",
