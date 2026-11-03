@@ -8,6 +8,8 @@ if (import.meta.env?.PROD) {
       local.includes(url.hostname) &&
       url.protocol === "http:";
     if (
+      (local.includes(url.hostname) &&
+        !local.includes(window.location.hostname)) ||
       (!localPreview && url.protocol !== "https:") ||
       url.username ||
       url.password ||
