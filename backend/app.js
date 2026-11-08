@@ -8,6 +8,7 @@ const dotenv = require("dotenv");
 const { createAuth, migrateAuth } = require("./auth");
 const { createFarmRoutes } = require("./farmRoutes");
 const { createDetectionRoutes } = require("./detectionRoutes");
+const { createPushRoutes, createPushWorker, pushConfig, enqueueNotification } = require("./push");
 const app = express();
 
 // baca something dari fail .env/ setup .env
@@ -438,25 +439,35 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
       );
     }
 
-    // 5. create noti
+    // 5. cipta notifikasi & queue push delivery
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
       const farmerQuery = await client.query(
         `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
         [node_id],
       );
+
       if (farmerQuery.rows.length > 0) {
-        await client.query(
-          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) VALUES ($1, $2, $3, $4, $5)`,
+        const farmerId = farmerQuery.rows[0].farmer_id;
+
+        // 1. Simpan ke table notification dan dapatkan notification_id
+        const notiResult = await client.query(
+          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
+           VALUES ($1, $2, $3, $4, $5) 
+           RETURNING notification_id`,
           [
             detection_id,
-            farmerQuery.rows[0].farmer_id,
+            farmerId,
             "Durian Detected!",
             `Durian jatuh dikesan dengan ${confidence}% keyakinan.`,
             false,
           ],
         );
+        const newNotiId = notiResult.rows[0].notification_id;
         notificationCreated = true;
+
+        // 2. Queue push delivery guna fungsi rasmi dari push.js
+        await enqueueNotification(client, newNotiId, farmerId);
       }
     }
     await client.query("COMMIT");
