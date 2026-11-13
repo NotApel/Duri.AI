@@ -3,6 +3,16 @@
 Orchard Map and Harvest Logs read the same authenticated backend detections.
 Simulation remains separate; failed requests never fall back to invented events.
 
+## Creating machine detections
+
+`POST /api/detection` and `POST /api/detections` are retired and return 410 for an
+authenticated farmer. They cannot be used to submit model predictions, confidence
+or a VERIFIED status. This retirement applies even when shared-key legacy device
+compatibility is enabled. New processed events use `/api/device/events` with a
+provisioned gateway credential and validated vibration/camera/image evidence.
+The frontend does not use the retired write routes. Detection GET routes and
+farmer feedback remain available; existing records are retained.
+
 ## History and details
 
 Harvest Logs uses cursor pagination with 20 events per page. The type filter is

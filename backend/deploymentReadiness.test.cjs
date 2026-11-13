@@ -104,6 +104,46 @@ test("production disables legacy writes; development compatibility is explicit a
       410,
     );
 });
+test("farmer detection-write aliases cannot bypass gateway validation or write prediction records", async () => {
+  const reading = (
+    await fixture.pool.query(
+      "INSERT INTO sensor_reading(node_id,amplitude,frequency) VALUES ($1,0,0) RETURNING reading_id",
+      [node.node_id],
+    )
+  ).rows[0];
+  const before = (
+    await fixture.pool.query("SELECT count(*) AS n FROM detection")
+  ).rows[0].n;
+  for (const endpoint of ["/detection", "/detections"]) {
+    assert.equal(
+      (await fixture.request(endpoint, { method: "POST", body: {} })).status,
+      401,
+    );
+    for (const status of ["VERIFIED", "PENDING", "REJECTED"]) {
+      const response = await fixture.request(endpoint, {
+        method: "POST",
+        token: owner.token,
+        body: {
+          reading_id: reading.reading_id,
+          prediction: "DURIAN",
+          confidence: 1,
+          verify_required: false,
+          detection_status: status,
+        },
+      });
+      assert.equal(response.status, 410);
+      assert.match(response.body.error, /\/api\/device\/events/);
+    }
+  }
+  assert.equal(
+    (await fixture.pool.query("SELECT count(*) AS n FROM detection")).rows[0].n,
+    before,
+  );
+  assert.equal(
+    (await fixture.request("/detections", { token: owner.token })).status,
+    200,
+  );
+});
 test("gateway heartbeats are scoped to assigned nodes and never fall back from Bearer to shared credentials", async () => {
   assert.equal((await heartbeat(node.node_id, owner.token)).status, 401);
   assert.equal((await heartbeat(unassigned.node_id)).status, 404);
@@ -117,6 +157,7 @@ test("gateway heartbeats are scoped to assigned nodes and never fall back from B
   assert.equal(result.body.status, "ONLINE");
   assert.equal(result.body.latitude, null);
   assert.equal(result.body.battery_level, null);
+  assert.equal(result.body.battery_recorded_at, null);
   assert.equal(result.body.simulation, true);
   assert.equal(
     (
@@ -146,9 +187,74 @@ test("gateway heartbeats are scoped to assigned nodes and never fall back from B
   );
   assert.equal((await heartbeat(node.node_id)).status, 404);
   await fixture.pool.query(
-    "UPDATE sensor_node SET is_active=TRUE,status='OFFLINE',last_ping_at=NULL,latitude=NULL,longitude=NULL,battery_level=NULL WHERE node_id=$1",
+    "UPDATE sensor_node SET is_active=TRUE,status='OFFLINE',last_ping_at=NULL,latitude=NULL,longitude=NULL,battery_level=NULL,battery_recorded_at=NULL WHERE node_id=$1",
     [node.node_id],
   );
+});
+test("connectivity preserves battery measurements and their times; zero and explicit clearing remain supported", async () => {
+  try {
+    // An upgraded record may have a measurement with no known recording time.
+    await fixture.pool.query(
+      "UPDATE sensor_node SET battery_level=62,battery_recorded_at=NULL WHERE node_id=$1",
+      [node.node_id],
+    );
+    await migrateAuth(fixture.pool);
+    await migrateAuth(fixture.pool);
+    const legacy = await heartbeat(node.node_id);
+    assert.equal(legacy.body.battery_level, 62);
+    assert.equal(legacy.body.battery_recorded_at, null);
+    const measured = await heartbeat(node.node_id, gateway.credential, {
+      battery_level: 75,
+    });
+    assert.equal(measured.status, 200);
+    assert.equal(measured.body.battery_level, 75);
+    assert.ok(Number.isFinite(Date.parse(measured.body.battery_recorded_at)));
+    await fixture.pool.query(
+      "UPDATE sensor_node SET last_ping_at=NOW()-INTERVAL '10 minutes' WHERE node_id=$1",
+      [node.node_id],
+    );
+    const ping = await heartbeat(node.node_id);
+    assert.equal(ping.body.status, "ONLINE");
+    assert.equal(ping.body.battery_level, 75);
+    assert.equal(
+      ping.body.battery_recorded_at,
+      measured.body.battery_recorded_at,
+    );
+    for (const invalid of [-1, 101, 0.5, ""]) {
+      assert.equal(
+        (
+          await heartbeat(node.node_id, gateway.credential, {
+            battery_level: invalid,
+          })
+        ).status,
+        400,
+      );
+    }
+    const unchanged = await heartbeat(node.node_id);
+    assert.equal(unchanged.body.battery_level, 75);
+    assert.equal(
+      unchanged.body.battery_recorded_at,
+      measured.body.battery_recorded_at,
+    );
+    const cleared = await heartbeat(node.node_id, gateway.credential, {
+      battery_level: null,
+    });
+    assert.equal(cleared.body.battery_level, null);
+    assert.equal(cleared.body.battery_recorded_at, null);
+    const zero = await heartbeat(node.node_id, gateway.credential, {
+      battery_level: 0,
+    });
+    assert.equal(zero.body.battery_level, 0);
+    assert.ok(zero.body.battery_recorded_at);
+    const last = await heartbeat(node.node_id);
+    assert.equal(last.body.battery_level, 0);
+    assert.equal(last.body.battery_recorded_at, zero.body.battery_recorded_at);
+  } finally {
+    await fixture.pool.query(
+      "UPDATE sensor_node SET battery_level=NULL,battery_recorded_at=NULL WHERE node_id=$1",
+      [node.node_id],
+    );
+  }
 });
 test("different concurrent events serialize safely, refresh connectivity and retain unavailable telemetry", async () => {
   const bodies = [payload(), payload()];

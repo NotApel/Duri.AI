@@ -108,8 +108,10 @@ separate empty outbox only after validating the camera/model on the Pi.
 ## Recovery and capacity
 
 SQLite uses WAL and synchronous commits. A lease recovers interrupted sends after
-150 seconds; timeouts/5xx responses back off to five minutes, and Retry-After is
-honoured. Retries reuse identical normalized evidence. A credential rotation for
+150 seconds; timeouts/5xx responses back off to five minutes from completion of
+the failed attempt. A delta-seconds Retry-After starts when the response arrives;
+an HTTP-date Retry-After remains an absolute deadline. These deadlines survive
+restart. Retries reuse identical normalized evidence. A credential rotation for
 the same gateway works; changing API origin, gateway ID or simulation mode requires
 a separate outbox, preventing accidental cross-account uploads.
 

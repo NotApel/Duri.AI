@@ -18,9 +18,11 @@
 3. Restore a backup into a separate staging database, apply the new backend there,
    and compare farmer/event/feedback counts. Startup migrations are additive and
    repeatable. `005_feedback_categories.sql` adds missing reference categories only;
-   it does not reset IDs, descriptions, accounts or events. Never run the demo seed
-   against production. It now refuses production and requires explicit development
-   opt-in (`ALLOW_DESTRUCTIVE_SEED=true`).
+   it does not reset IDs, descriptions, accounts or events.
+   `006_battery_measurement_time.sql` adds the optional battery measurement time;
+   restart the updated backend so its heartbeat query has this column available.
+   Never run the demo seed against production. It now refuses production and
+   requires explicit development opt-in (`ALLOW_DESTRUCTIVE_SEED=true`).
 4. Provision per-Pi gateway credentials and migrate producers to `/api/device/events`
    and gateway-authenticated heartbeats. `LEGACY_DEVICE_ROUTES_ENABLED` defaults to
    false in production. Shared-key legacy writes return 410 before parsing bodies.

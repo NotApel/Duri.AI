@@ -23,3 +23,11 @@ Startup also runs `005_feedback_categories.sql` when the feedback-category table
 exists. It adds missing Animal, Wind, Rain and Other categories without replacing
 existing IDs, case variants, descriptions or farmer records. No demo seed is
 needed to enable No Durian feedback on a fresh full-schema database.
+
+## Battery measurement time
+
+`006_battery_measurement_time.sql` adds nullable `sensor_node.battery_recorded_at`.
+Restarting the updated backend applies it automatically. Existing battery values
+are preserved with an unknown measurement time; no historical timestamp is invented.
+Connectivity-only heartbeats preserve both fields. A supplied measurement updates
+the percentage and time together; explicit null clears both.

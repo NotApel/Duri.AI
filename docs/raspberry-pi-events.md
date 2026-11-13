@@ -143,6 +143,11 @@ credential, scoped to an active node assigned to that gateway and its farmer.
 Revoked credentials and unrelated nodes cannot update telemetry. Send `{}` for
 connectivity only, or actual `battery_level` (integer 0–100) and a complete
 `latitude`/`longitude` pair when measured. Never send invented map coordinates.
+Omitting `battery_level` preserves the last measurement and `battery_recorded_at`;
+an explicit `null` clears both, while `0` is a valid measured percentage. The
+measurement timestamp changes only when a battery value is supplied, not when
+connectivity is refreshed. Existing migrated values have an unknown measurement
+time until the device reports another value.
 A new committed event also refreshes connectivity without inventing battery/GPS.
 Disabled nodes cannot report; acknowledging an old event does not reactivate one.
 

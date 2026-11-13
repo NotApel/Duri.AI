@@ -261,6 +261,7 @@ function createFarmRoutes(pool, authenticate, deviceAuth) {
     route(async (req, res) => {
       requireId(req.params.nodeId);
       const body = req.body || {};
+      const hasBattery = Object.hasOwn(body, "battery_level");
       const hasLocation =
         body.latitude !== undefined || body.longitude !== undefined;
       const latitude = hasLocation
@@ -276,7 +277,10 @@ function createFarmRoutes(pool, authenticate, deviceAuth) {
       if (battery !== null && !Number.isInteger(battery))
         fail(400, "Battery must be an integer percentage.");
       const result = await pool.query(
-        `UPDATE sensor_node SET status='ONLINE',last_ping_at=NOW(),battery_level=$1,
+        `UPDATE sensor_node SET status='ONLINE',last_ping_at=NOW(),
+      battery_level=CASE WHEN $8 THEN $1 ELSE battery_level END,
+      battery_recorded_at=CASE WHEN NOT $8 THEN battery_recorded_at
+        WHEN $1::integer IS NULL THEN NULL ELSE NOW() END,
       latitude=CASE WHEN $2 THEN $3 ELSE latitude END,longitude=CASE WHEN $2 THEN $4 ELSE longitude END,
       location_recorded_at=CASE WHEN $2 THEN NOW() ELSE location_recorded_at END
       WHERE node_id=$5 AND is_active=TRUE
@@ -294,6 +298,7 @@ function createFarmRoutes(pool, authenticate, deviceAuth) {
           req.params.nodeId,
           req.device?.gateway_id || null,
           req.device?.key_hash || null,
+          hasBattery,
         ],
       );
       if (!result.rows.length) fail(404, "Active node not found.");

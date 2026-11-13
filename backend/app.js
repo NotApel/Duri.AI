@@ -134,51 +134,14 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth, async (req, res) => {
 app.use("/api", createFarmRoutes(pool, auth, deviceAuth));
 app.use("/api", createDetectionRoutes(pool, auth, storage));
 
-// create detection baru
-app.post(["/api/detection", "/api/detections"], auth, async (req, res) => {
-  try {
-    let {
-      reading_id,
-      prediction,
-      confidence,
-      verify_required,
-      detection_status,
-    } = req.body;
-    if (!reading_id || !prediction || confidence === undefined)
-      return res.status(400).json({ error: "Missing required fields" });
-
-    if (
-      typeof prediction !== "string" ||
-      !["DURIAN", "NOT_DURIAN"].includes(prediction.toUpperCase())
-    )
-      return res.status(400).json({ error: "Invalid prediction." });
-    const ownReading = await pool.query(
-      "SELECT 1 FROM sensor_reading sr JOIN sensor_node sn ON sn.node_id=sr.node_id JOIN farm_plot fp ON fp.plot_id=sn.plot_id WHERE sr.reading_id=$1 AND fp.farmer_id=$2",
-      [reading_id, req.farmer.id],
-    );
-    if (!ownReading.rows.length)
-      return res.status(404).json({ error: "Sensor reading not found." });
-
-    prediction = prediction.toUpperCase();
-    detection_status = detection_status
-      ? detection_status.toUpperCase()
-      : "PENDING";
-
-    const result = await pool.query(
-      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [
-        reading_id,
-        prediction,
-        confidence,
-        verify_required || false,
-        detection_status,
-      ],
-    );
-    res.status(201).json(result.rows[0]);
-  } catch {
-    res.status(500).json({ error: "Failed to create detection" });
-  }
-});
+// Farmer sessions can review detections, but cannot assert machine predictions.
+// Keep a clear migration response on both old write aliases; GET/feedback stay available.
+app.post(["/api/detection", "/api/detections"], auth, (_req, res) =>
+  res.status(410).json({
+    error:
+      "Manual detection creation is retired. Send processed events through POST /api/device/events using a provisioned gateway credential.",
+  }),
+);
 
 // 5. detection image endpoints - table detection-image
 

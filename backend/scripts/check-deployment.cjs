@@ -37,6 +37,11 @@ async function main() {
     );
     if (tables.rows.some((row) => !row.relation))
       throw new Error("SCHEMA_MISSING");
+    const batteryColumn = await pool.query(
+      "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='sensor_node' AND column_name='battery_recorded_at'",
+    );
+    if (!batteryColumn.rows.length)
+      throw new Error("BATTERY_MIGRATION_MISSING");
     const categories = await pool.query(
       "SELECT count(*)::int AS n FROM feedback_category",
     );

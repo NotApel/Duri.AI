@@ -26,7 +26,10 @@ function configuration(env = process.env) {
   const match = /^duri_pi_([a-f0-9-]{36})\.[a-f0-9]{64}$/.exec(
     env.PI_GATEWAY_CREDENTIAL || "",
   );
-  if (!match || !require("../backend/eventValidation").uuidPattern.test(match[1]))
+  if (
+    !match ||
+    !require("../backend/eventValidation").uuidPattern.test(match[1])
+  )
     throw new Error(
       "Configure PI_GATEWAY_CREDENTIAL with a provisioned gateway credential.",
     );
@@ -88,14 +91,15 @@ function client(config, fetcher = fetch) {
 async function deliverOne(
   outbox,
   sender,
-  { now = Date.now(), signal, jitter = 0 } = {},
+  { clock = Date.now, signal, jitter = 0 } = {},
 ) {
-  const job = outbox.claim(now, 150000);
+  const job = outbox.claim(clock(), 150000);
   if (!job) return false;
   let code = "NETWORK_ERROR",
-    wait = 0;
+    retryAt = 0;
   try {
     const response = await sender.send(JSON.parse(job.payload), signal);
+    const receivedAt = clock();
     code = `HTTP_${response.status}`;
     if ([200, 201].includes(response.status)) {
       code = "INVALID_ACK";
@@ -106,29 +110,31 @@ async function deliverOne(
         ack.simulation !== sender.simulation
       )
         throw new Error("Invalid event acknowledgement");
-      outbox.finish(job, "SENT", null, 0, now);
+      outbox.finish(job, "SENT", null, 0, clock());
       return true;
     }
     if (response.status < 500 && ![408, 425, 429].includes(response.status)) {
       await response.body?.cancel();
-      outbox.finish(job, "FAILED", code, 0, now);
+      outbox.finish(job, "FAILED", code, 0, clock());
       return true;
     }
     const retry = response.headers.get("retry-after");
-    wait = /^\d+$/.test(retry || "")
-      ? Number(retry) * 1000
-      : Math.max(0, Date.parse(retry) - now) || 0;
+    const requestedAt = /^\d+$/.test(retry || "")
+      ? receivedAt + Number(retry) * 1000
+      : Date.parse(retry);
+    if (Number.isSafeInteger(requestedAt)) retryAt = requestedAt;
     await response.body?.cancel();
   } catch {
     /* Keep evidence on unknown network outcomes and malformed acknowledgements. */
   }
   const backoff = Math.min(300000, 1000 * 2 ** Math.min(job.attempts - 1, 9));
+  const finishedAt = clock();
   outbox.finish(
     job,
     "PENDING",
     code,
-    now + Math.max(backoff + jitter, wait),
-    now,
+    Math.max(finishedAt + backoff + jitter, retryAt),
+    finishedAt,
   );
   return true;
 }

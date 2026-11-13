@@ -9,8 +9,13 @@ Backend API untuk sistem Duri.AI. Dibina menggunakan Node.js, Express.js, dan Po
 Kebanyakan endpoint memerlukan **JWT Token**.
 Sertakan header: `Authorization: Bearer <token>`
 
-Khas untuk Hardware (ESP32), gunakan **API Key**:
-Sertakan header: `x-api-key: duri-ai-device-secret-2026`
+Processed Pi events and node heartbeats use a provisioned per-gateway Bearer
+credential. See [the Pi event contract](../docs/raspberry-pi-events.md). The older
+shared-key device routes are disabled by default in production.
+
+Farmer `POST /detection` and `POST /detections` are retired (410). They cannot
+create model predictions or verified events. Reading detections and submitting
+farmer feedback still use the authenticated farmer session.
 
 ---
 
