@@ -158,6 +158,6 @@ function createStorage(env = process.env, fetcher = fetch) {
       );
     }
   }
-  return { configured: Boolean(base), upload, signRows };
+  return { configured: Boolean(base), upload, signRows, check: privateBucket };
 }
 module.exports = { createStorage };

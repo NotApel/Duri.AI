@@ -29,7 +29,14 @@ app.use(cors({ origin: frontendOrigins, credentials: true }));
 // middleware hardware: esp32 (Device API Key)
 
 // semak API key untuk esp32 jer
+const { legacyDevicesEnabled } = require("./deviceAuth");
+const legacyEnabled = legacyDevicesEnabled();
 const deviceAuth = (req, res, next) => {
+  if (!legacyEnabled)
+    return res.status(410).json({
+      error:
+        "Legacy device routes are disabled. Use a provisioned gateway and POST /api/device/events.",
+    });
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== process.env.DEVICE_API_KEY) {
     return res.status(401).json({ error: "Unauthorized: Invalid API Key" });
@@ -52,6 +59,12 @@ app.use("/api", (_req, res, next) => {
 });
 // Authenticate the Pi before parsing its bounded image payload.
 app.use("/api/device", createProcessedEventRoutes(pool, storage));
+// Retired device writes are rejected before parsing their large legacy bodies.
+app.use(
+  ["/api/sensor-readings", "/api/device/detections", "/api/fusion-event"],
+  (req, res, next) =>
+    req.method === "POST" ? deviceAuth(req, res, next) : next(),
+);
 app.use(express.json({ limit: "50mb" }));
 
 // authentication router

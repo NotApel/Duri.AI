@@ -10,6 +10,13 @@ const pool = new Pool({
 });
 
 async function seed() {
+  // This script truncates records. Never allow it on a production backend.
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DESTRUCTIVE_SEED !== 'true') {
+    console.error('Seed refused. Use an isolated development database and explicitly set ALLOW_DESTRUCTIVE_SEED=true.');
+    await pool.end();
+    process.exitCode = 1;
+    return;
+  }
   const client = await pool.connect();
 
   try {

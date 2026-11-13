@@ -1,13 +1,5 @@
 require('dotenv').config();
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-});
+const pool = require('./db');
 
 async function checkSchema() {
   const tables = [
@@ -38,4 +30,4 @@ async function checkSchema() {
   await pool.end();
 }
 
-checkSchema().catch(err => { console.error(err); process.exit(1); });
+checkSchema().catch(async err => { console.error('Schema check failed:', err.code || 'DATABASE_ERROR'); await pool.end(); process.exitCode = 1; });

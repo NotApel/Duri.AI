@@ -49,9 +49,6 @@ async function main() {
         [reading.reading_id],
       )
     ).rows;
-    await fixture.pool.query(
-      "INSERT INTO feedback_category(category_name,description) VALUES ('Animal','Test-only category')",
-    );
     let output = "";
     frontend = spawn(
       process.execPath,

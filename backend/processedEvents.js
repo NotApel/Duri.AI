@@ -101,7 +101,7 @@ function createProcessedEventRoutes(pool, storage) {
         const node = (
           await client.query(
             `SELECT sn.node_id,sn.node_name,fp.farmer_id FROM gateway_node gn JOIN sensor_node sn ON sn.node_id=gn.node_id JOIN farm_plot fp ON fp.plot_id=sn.plot_id
-        WHERE gn.gateway_id=$1 AND gn.node_id=$2 AND fp.farmer_id=$3 AND sn.is_active=TRUE FOR SHARE OF gn,sn,fp`,
+        WHERE gn.gateway_id=$1 AND gn.node_id=$2 AND fp.farmer_id=$3 AND sn.is_active=TRUE FOR UPDATE OF sn FOR SHARE OF gn,fp`,
             [device.gateway_id, event.evidence.node_id, device.farmer_id],
           )
         ).rows[0];
@@ -173,6 +173,11 @@ function createProcessedEventRoutes(pool, storage) {
           client,
           notification.notification_id,
           device.farmer_id,
+        );
+        // Receiving a new event proves connectivity, not battery level or position.
+        await client.query(
+          "UPDATE sensor_node SET status='ONLINE',last_ping_at=NOW() WHERE node_id=$1",
+          [node.node_id],
         );
         await client.query(
           "UPDATE gateway_event SET state='COMPLETED',detection_id=$3,notification_id=$4 WHERE gateway_id=$1 AND source_event_id=$2",

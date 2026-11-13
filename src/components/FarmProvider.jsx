@@ -7,6 +7,7 @@ import {
   validateFarm,
 } from "../services/farmSimulation";
 import { useFarmList } from "../services/useFarmList";
+import { defaultDataSource } from "../services/dataSource";
 export default function FarmProvider({ farmerId, children }) {
   const key = farmStorageKey(farmerId);
   const [initial] = useState(() => {
@@ -34,11 +35,12 @@ export default function FarmProvider({ farmerId, children }) {
   const [revision, setRevision] = useState(0);
   const [mode, updateMode] = useState(() => {
     try {
-      return sessionStorage.getItem(`${key}.mode`) === "backend"
-        ? "backend"
-        : "simulation";
+      const stored = sessionStorage.getItem(`${key}.mode`);
+      return ["backend", "simulation"].includes(stored)
+        ? stored
+        : defaultDataSource();
     } catch {
-      return "simulation";
+      return defaultDataSource();
     }
   });
   const [backendPlotId, setBackendPlotId] = useState(() => {

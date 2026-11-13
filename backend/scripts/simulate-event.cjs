@@ -9,6 +9,7 @@ async function main() {
       image: { type: "string" },
       "event-id": { type: "string" },
       "occurred-at": { type: "string" },
+      outbox: { type: "boolean", default: false },
     },
   });
   if (
@@ -46,6 +47,19 @@ async function main() {
     ],
   };
   console.log("SIMULATION event ID:", eventId, "occurred_at:", time);
+  if (values.outbox) {
+    const config = require("../../pi/client.cjs").configuration();
+    if (!config.simulation)
+      throw new Error("The simulator requires PI_SIMULATION=true.");
+    const { Outbox } = require("../../pi/outbox.cjs");
+    const store = new Outbox(config.outboxPath, config.identity);
+    try {
+      console.log("SIMULATION queued:", JSON.stringify(store.enqueue(payload)));
+    } finally {
+      store.close();
+    }
+    return;
+  }
   const endpoint = new URL("/api/device/events", process.env.PI_API_URL);
   if (
     endpoint.protocol !== "https:" &&

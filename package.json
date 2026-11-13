@@ -12,13 +12,13 @@
     "build:cloudflare:staging": "vite build --mode cloudflare-staging",
     "cf:preview": "wrangler dev --local --env=\"\"",
     "cf:deploy": "npm run build:cloudflare && wrangler deploy --env=\"\"",
-    "cf:deploy:staging": "npm run build:cloudflare:staging && wrangler deploy --env staging"
+    "cf:deploy:staging": "npm run build:cloudflare:staging && wrangler deploy --env staging",
+    "test": "node --test tests/*.test.js pi/*.test.cjs",
+    "test:browser": "node tests/priorities.browser.cjs && node tests/detectionIntegration.browser.cjs && node tests/passwordRecovery.browser.cjs && node tests/farmManagement.browser.cjs",
+    "test:pwa": "node tests/cloudPwa.browser.cjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
-    "bcrypt": "^6.0.0",
-    "express-rate-limit": "^8.7.1",
-    "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "leaflet": "^1.9.4",
@@ -39,6 +39,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "playwright": "^1.65.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
     "vite": "^8.0.12",
@@ -46,5 +47,8 @@
   },
   "engines": {
     "node": "24.x"
+  },
+  "overrides": {
+    "minimatch@>=7 <11.0.1": "^11.0.8"
   }
 }

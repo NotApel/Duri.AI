@@ -1,0 +1,60 @@
+name: Deployment checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      DB_SSL: "false"
+      DATABASE_URL: ""
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+      - run: npm ci
+      - run: npm --prefix backend ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm --prefix backend test
+      - run: npm audit --omit=dev
+      - run: npm --prefix backend audit --omit=dev
+      - run: npm run build:cloudflare
+        env:
+          VITE_API_URL: https://backend.example.invalid/api
+      - run: npx wrangler deploy --env="" --dry-run
+      - run: npx playwright install --with-deps chromium
+      - name: Use the installed browser
+        run: node -e 'process.stdout.write("CHROMIUM_PATH=" + require("playwright").chromium.executablePath() + "\n")' >> "$GITHUB_ENV"
+      - run: npm run test:browser
+      - run: npm run test:pwa
+        env:
+          PWA_SERVER: wrangler

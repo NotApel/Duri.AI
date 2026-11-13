@@ -1,0 +1,27 @@
+[Unit]
+Description=Duri.AI Raspberry Pi event outbox
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# Create this dedicated account and install the repository under /opt/duri-ai.
+User=duri-ai
+Group=duri-ai
+WorkingDirectory=/opt/duri-ai
+EnvironmentFile=/etc/duri-ai/pi.env
+ExecStart=/usr/bin/node --env-file=/etc/duri-ai/pi.env /opt/duri-ai/pi/run.cjs worker
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=135
+StateDirectory=duri-ai
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/duri-ai
+
+[Install]
+WantedBy=multi-user.target

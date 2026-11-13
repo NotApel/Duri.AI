@@ -5,6 +5,9 @@ dist-ssr/
 .wrangler/
 .dev.vars
 .dev.vars.*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Local environment files; keep safe configuration examples trackable
 .env

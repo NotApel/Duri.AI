@@ -1,4 +1,6 @@
 const { Router } = require("express");
+const { createDeviceAuth } = require("./deviceAuth");
+const rateLimit = require("express-rate-limit");
 const {
   requireId,
   text,
@@ -10,6 +12,13 @@ const {
 } = require("./apiHelpers");
 function createFarmRoutes(pool, authenticate, deviceAuth) {
   const router = Router();
+  const gatewayAuth = createDeviceAuth(pool);
+  const heartbeatLimit = rateLimit({
+    windowMs: 60000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
   const configured = Number(process.env.NODE_OFFLINE_AFTER_SECONDS || 300);
   const offlineAfter =
     Number.isFinite(configured) && configured > 0 ? configured : 300;
@@ -243,7 +252,12 @@ function createFarmRoutes(pool, authenticate, deviceAuth) {
   // Device reports are the only source of node coordinates and connection telemetry.
   router.post(
     "/device/nodes/:nodeId/heartbeat",
-    deviceAuth,
+    heartbeatLimit,
+    // A supplied Bearer credential must never fall back to a shared key.
+    (req, res, next) =>
+      req.headers.authorization
+        ? gatewayAuth(req, res, next)
+        : deviceAuth(req, res, next),
     route(async (req, res) => {
       requireId(req.params.nodeId);
       const body = req.body || {};
@@ -265,11 +279,28 @@ function createFarmRoutes(pool, authenticate, deviceAuth) {
         `UPDATE sensor_node SET status='ONLINE',last_ping_at=NOW(),battery_level=$1,
       latitude=CASE WHEN $2 THEN $3 ELSE latitude END,longitude=CASE WHEN $2 THEN $4 ELSE longitude END,
       location_recorded_at=CASE WHEN $2 THEN NOW() ELSE location_recorded_at END
-      WHERE node_id=$5 AND is_active=TRUE RETURNING *`,
-        [battery, hasLocation, latitude, longitude, req.params.nodeId],
+      WHERE node_id=$5 AND is_active=TRUE
+      AND ($6::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM gateway_node gn JOIN device_gateway dg ON dg.gateway_id=gn.gateway_id
+        JOIN farm_plot fp ON fp.plot_id=sensor_node.plot_id
+        WHERE gn.node_id=sensor_node.node_id AND dg.gateway_id=$6
+        AND dg.farmer_id=fp.farmer_id AND dg.key_hash=$7 AND dg.is_active=TRUE
+      )) RETURNING *`,
+        [
+          battery,
+          hasLocation,
+          latitude,
+          longitude,
+          req.params.nodeId,
+          req.device?.gateway_id || null,
+          req.device?.key_hash || null,
+        ],
       );
       if (!result.rows.length) fail(404, "Active node not found.");
-      res.json(report(result.rows[0]));
+      res.json({
+        ...report(result.rows[0]),
+        simulation: req.device?.is_simulation || false,
+      });
     }),
   );
   return router;

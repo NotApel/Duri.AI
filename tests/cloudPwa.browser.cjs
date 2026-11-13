@@ -350,6 +350,10 @@ async function main() {
       () =>
         document.querySelector(".d-image-viewer figure img")?.naturalWidth > 0,
     );
+    await page.goto(`${base}/dashboard`);
+    assert.equal(await page.locator("#dashboard-source").inputValue(), "live");
+    await page.goto(`${base}/plots`);
+    assert.equal(await page.getByLabel("Management data source").inputValue(), "backend");
     await page.goto(`${base}/settings`);
     await page
       .getByText("Harvest alerts are disabled for this account and browser.", {

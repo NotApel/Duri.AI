@@ -27,7 +27,7 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
   },
   {
-    files: ["backend/**/*.{js,cjs}"],
+    files: ["backend/**/*.{js,cjs}", "pi/**/*.cjs"],
     extends: [js.configs.recommended],
     languageOptions: { sourceType: "commonjs", globals: globals.node },
   },

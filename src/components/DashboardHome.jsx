@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { demoDetections } from "../data/demoDetections";
 import { apiRequest, fetchTraining } from "../services/api";
 import HarvestChart from "./HarvestChart";
+import { defaultDataSource } from "../services/dataSource";
 
 const demoNodes = [
   {
@@ -38,7 +39,9 @@ const demoData = {
 };
 
 export default function DashboardHome() {
-  const [mode, setMode] = useState("simulation");
+  const [mode, setMode] = useState(() =>
+    defaultDataSource() === "backend" ? "live" : "simulation",
+  );
   const [search, setSearch] = useState("");
   const [liveData, setData] = useState(null);
   const data = mode === "simulation" ? demoData : liveData;

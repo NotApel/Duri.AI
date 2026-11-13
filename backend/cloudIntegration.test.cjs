@@ -748,7 +748,7 @@ test("farmer rejection cancels an alert still waiting in the outbox", async () =
   assert.equal(event.status, 201);
   const category = (
     await fixture.pool.query(
-      "INSERT INTO feedback_category(category_name,description) VALUES ('Other','Test category') RETURNING category_id",
+      "SELECT category_id FROM feedback_category WHERE category_name='Other'",
     )
   ).rows[0].category_id;
   assert.equal(

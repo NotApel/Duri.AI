@@ -23,7 +23,8 @@ is introduced. Node.js **24.x** is pinned in both packages.
    service credential. The backend verifies the bucket is private before uploads
    or signing; it does not change existing bucket policies or make objects public.
 5. Startup applies repeatable migrations under the existing PostgreSQL advisory
-   transaction lock, including `004_cloud_events_push.sql`. The backend role must
+   transaction lock, including `004_cloud_events_push.sql` and the reference-only
+   `005_feedback_categories.sql`. The backend role must
    own the application tables/permit these migrations. Existing accounts and
    records are preserved; sensor measurements become nullable/wider, image rows
    gain private Storage references, and gateway/push tables are added.
@@ -128,9 +129,11 @@ separate origins. Add exact additional frontend origins only when needed; no
 wildcard credentialed CORS. The production proxy setting trusts one Render proxy
 hop; do not expose that setting on a directly accessible untrusted proxy chain.
 
-`DEVICE_API_KEY` supports legacy device routes during migration. New Pi events
-must use provisioned per-gateway Bearer credentials. Remove the shared legacy key
-when old producers have migrated. Registration does not provision physical
+`DEVICE_API_KEY` supports legacy device routes only when explicitly enabled in
+production with `LEGACY_DEVICE_ROUTES_ENABLED=true`. Keep that switch false for
+new installations; retired shared-key writes otherwise return 410. New Pi events
+and heartbeats use provisioned per-gateway Bearer credentials. Remove the shared
+legacy key when old producers have migrated. Registration does not provision physical
 hardware or install firmware.
 
 ## 3. Cloudflare frontend
@@ -221,3 +224,10 @@ farmer saw an alert.
 5. Real Supabase credentials, Render/Cloudflare hosting, OS/browser background delivery
    and physical ESP32/Pi capture/inference require this staging verification. Local
    emulator tests do not prove those external services/hardware are connected.
+
+## Deployment gate
+
+Follow the [production checklist](production-checklist.md), including the read-only
+`npm run check:deployment` backend preflight, backup/restore drill, CI checks and
+real-device staging verification. The [Pi setup guide](raspberry-pi-setup.md) covers
+the durable sender and systemd startup for the ESP32-camera → Pi architecture.

@@ -28,6 +28,7 @@ async function migrateAuth(pool) {
       "002_password_reset.sql",
       "003_farm_locations.sql",
       "004_cloud_events_push.sql",
+      "005_feedback_categories.sql",
     ]) {
       const sql = await readFile(
         path.join(__dirname, "migrations", filename),

@@ -69,8 +69,9 @@ Values above illustrate the contract; they are not hardware measurements. Send
 actual Pi results. Vibration must be triggered and camera prediction must be
 DURIAN with confidence **90–100 percent**. No sensor/model threshold is changed by
 a farmer's demo preference. Uncertain/rejected candidates must not be labelled
-confirmed to pass this API. Existing legacy endpoints remain available during
-migration but have no stable-source-ID retry guarantee.
+confirmed to pass this API. Legacy endpoints remain development/migration compatibility only, have no
+stable-source-ID retry guarantee and are disabled by default in production.
+Use the new endpoint for real images, deduplication and push delivery.
 
 Amplitude/frequency/duration may be omitted or null when unavailable. Amplitude
 requires `g` or `m/s²`; duration uses seconds. Zero is valid. Original normalized
@@ -134,3 +135,16 @@ image file's modification time; preserve it or supply `--occurred-at` on retries
 The fixture is generated test artwork, not a camera capture. Simulation labels
 appear in event details, logs and notification titles. Existing browser-only farm
 simulation stays separate from this real-API integration simulator.
+
+## Node heartbeats
+
+`POST /api/device/nodes/:nodeId/heartbeat` accepts the same gateway Bearer
+credential, scoped to an active node assigned to that gateway and its farmer.
+Revoked credentials and unrelated nodes cannot update telemetry. Send `{}` for
+connectivity only, or actual `battery_level` (integer 0–100) and a complete
+`latitude`/`longitude` pair when measured. Never send invented map coordinates.
+A new committed event also refreshes connectivity without inventing battery/GPS.
+Disabled nodes cannot report; acknowledging an old event does not reactivate one.
+
+See [Pi installation, persistent queue and boot service](raspberry-pi-setup.md)
+for the new SQLite sender, retries and ESP32-camera handoff requirements.

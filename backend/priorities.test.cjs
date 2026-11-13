@@ -235,7 +235,7 @@ test("keyset pagination reaches all older events including microsecond timestamp
 test("feedback requires a category only for No Durian, allows blank comments and preserves model prediction", async () => {
   const category = (
     await fixture.pool.query(
-      "INSERT INTO feedback_category(category_name,description) VALUES ('Animal','Animal caused the event') RETURNING category_id",
+      "SELECT category_id FROM feedback_category WHERE category_name='Animal'",
     )
   ).rows[0].category_id;
   const endpoint = (id) => `/detections/${events[id].detection_id}/feedback`;

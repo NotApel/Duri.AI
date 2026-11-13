@@ -6,9 +6,10 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "node --require dotenv/config --test auth.test.cjs passwordRecovery.test.cjs priorities.test.cjs cloudIntegration.test.cjs",
+    "test": "node --require dotenv/config --test *.test.cjs",
     "gateway": "node scripts/gateway.cjs",
-    "simulate-event": "node scripts/simulate-event.cjs"
+    "simulate-event": "node scripts/simulate-event.cjs",
+    "check:deployment": "node scripts/check-deployment.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -35,5 +36,8 @@
   },
   "engines": {
     "node": "24.x"
+  },
+  "overrides": {
+    "minimatch@>=7 <11.0.1": "^11.0.8"
   }
 }

@@ -92,6 +92,7 @@ async function backendFixture(env = {}) {
         PORT: String(port),
         JWT_SECRET: "test-only-priorities-auth-secret",
         DEVICE_API_KEY: "test-only-priorities-device-key",
+        LEGACY_DEVICE_ROUTES_ENABLED: "true",
         SMTP_HOST: "",
         SMTP_FROM: "",
         PYTHON_PATH: "",

@@ -178,9 +178,15 @@ async function main() {
   ).rows;
   const first = events[0].detection_id,
     second = events[1].detection_id;
-  await pool.query(
-    "INSERT INTO feedback_category (category_id,category_name,description) OVERRIDING SYSTEM VALUE VALUES (27,'Other','Test category'),(31,'Animal','Test category')",
-  );
+  const categoryRows = (
+    await pool.query("SELECT category_id,category_name FROM feedback_category")
+  ).rows;
+  const animalCategory = categoryRows.find(
+    (row) => row.category_name === "Animal",
+  ).category_id;
+  const otherCategory = categoryRows.find(
+    (row) => row.category_name === "Other",
+  ).category_id;
   await pool.query(
     "INSERT INTO detection_image (detection_id,image_path,sequence_number) VALUES ($1,'/test-only/missing.png',2),($1,'/test-only/first.svg',1)",
     [second],
@@ -221,7 +227,7 @@ async function main() {
     await page.locator(".d-measurements strong").allTextContents(),
     ["0", "0 Hz", "Unavailable"],
   );
-  await page.getByLabel("Feedback category").selectOption("31");
+  await page.getByLabel("Feedback category").selectOption(animalCategory);
   await page.getByRole("radio", { name: "No Durian", exact: true }).check();
   await page.getByLabel("Detailed comments").fill("Saw an animal, no fruit.");
   // Retain the merged branch's optional upload and reject invalid files before POST.
@@ -297,7 +303,7 @@ async function main() {
   const feedback = (await pool.query("SELECT * FROM detection_feedback")).rows;
   assert.equal(feedback.length, 1);
   assert.equal(feedback[0].farmer_id, farmer.farmer_id);
-  assert.equal(feedback[0].category_id, "31");
+  assert.equal(feedback[0].category_id, animalCategory);
   assert.equal(feedback[0].correct_detection, false);
   assert.equal(feedback[0].comment_farmer, "Saw an animal, no fruit.");
   assert.deepEqual(
@@ -404,7 +410,7 @@ async function main() {
       return original.call(this, key, value);
     };
   });
-  await page.getByLabel("Feedback category").selectOption("27");
+  await page.getByLabel("Feedback category").selectOption(otherCategory);
   await page.getByRole("radio", { name: "Durian", exact: true }).check();
   await page
     .getByLabel("Detailed comments")

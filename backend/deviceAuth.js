@@ -1,6 +1,18 @@
 const { randomUUID, randomBytes, timingSafeEqual } = require("node:crypto");
 const { digest } = require("./eventValidation");
 const { transaction, requireId, fail, text } = require("./apiHelpers");
+function legacyDevicesEnabled(env = process.env) {
+  if (
+    env.LEGACY_DEVICE_ROUTES_ENABLED !== undefined &&
+    !["true", "false"].includes(env.LEGACY_DEVICE_ROUTES_ENABLED)
+  )
+    throw new Error("LEGACY_DEVICE_ROUTES_ENABLED must be true or false.");
+  return (
+    env.LEGACY_DEVICE_ROUTES_ENABLED === "true" ||
+    (env.LEGACY_DEVICE_ROUTES_ENABLED === undefined &&
+      env.NODE_ENV !== "production")
+  );
+}
 function credential(gatewayId) {
   const secret = randomBytes(32).toString("hex");
   return { token: `duri_pi_${gatewayId}.${secret}`, hash: digest(secret) };
@@ -82,4 +94,9 @@ function createDeviceAuth(pool) {
     }
   };
 }
-module.exports = { createDeviceAuth, provisionGateway, credential };
+module.exports = {
+  createDeviceAuth,
+  provisionGateway,
+  credential,
+  legacyDevicesEnabled,
+};

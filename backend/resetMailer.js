@@ -47,7 +47,7 @@ function createResetMailer(env = process.env) {
     logger: false,
     debug: false,
   });
-  return async function sendResetEmail(to, token) {
+  const sendResetEmail = async function (to, token) {
     // A fragment keeps the credential out of frontend HTTP requests/access logs.
     const url = new URL("/reset-password", origin);
     url.hash = new URLSearchParams({ token }).toString();
@@ -70,5 +70,7 @@ function createResetMailer(env = process.env) {
       });
     }
   };
+  sendResetEmail.verify = () => transport.verify();
+  return sendResetEmail;
 }
 module.exports = { createResetMailer, ResetDeliveryError };

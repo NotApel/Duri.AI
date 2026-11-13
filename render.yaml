@@ -35,3 +35,7 @@ services:
       # then set PUSH_ENABLED=true. Never commit their values here.
       - key: PUSH_ENABLED
         value: "false"
+      - key: LEGACY_DEVICE_ROUTES_ENABLED
+        value: "false"
+      - key: AUTO_RETRAIN_ENABLED
+        value: "false"
