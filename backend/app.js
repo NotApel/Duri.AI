@@ -297,7 +297,7 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
 
 // 12. image detection endpoint - esp32 cam
 
-// hardware hantar gambar n prediction
+// hardware hantar gambar n prediction (Diselaraskan simpan 5 URL dalam 1 kolum image_urls)
 app.post("/api/device/detections", deviceAuth, async (req, res) => {
   let client;
   try {
@@ -318,18 +318,24 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     }
 
     const reading_id = readingQuery.rows[0].reading_id;
-    const detectionResult = await client.query(
-      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
-      [reading_id, prediction.toUpperCase(), confidence, false, "PENDING"],
-    );
-    const detection_id = detectionResult.rows[0].detection_id;
 
+    // Sediakan 5 URL imej dalam bentuk array (text[])
+    let image_urls = [];
     if (image_base64) {
-      await client.query(
-        `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) VALUES ($1, $2, $3, $4)`,
-        [detection_id, `/uploads/detection_${detection_id}.jpg`, 1, true],
-      );
+      image_urls = [
+        `/uploads/detection_dev_1.jpg`,
+        `/uploads/detection_dev_2.jpg`,
+        `/uploads/detection_dev_3.jpg`,
+        `/uploads/detection_dev_4.jpg`,
+        `/uploads/detection_dev_5.jpg`
+      ];
     }
+
+    const detectionResult = await client.query(
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
+      [reading_id, prediction.toUpperCase(), confidence, false, "PENDING", image_urls],
+    );
+
     await client.query("COMMIT");
     res.status(201).json({
       message: "Detection processed",
@@ -345,7 +351,7 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
 
 // 13. sensor fusion endpoint - vibrate + cam
 
-// gabung 2 sensor
+// gabung 2 sensor (Diselaraskan simpan 5 URL dalam 1 kolum image_urls)
 app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   let client;
   try {
@@ -394,25 +400,31 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
       verify_required = true;
     }
 
-    // 3. simpan detection
+    // Sediakan 5 URL imej dalam bentuk array (text[])
+    let image_urls = [];
+    if (image_base64) {
+      image_urls = [
+        `/uploads/detection_event_1.jpg`,
+        `/uploads/detection_event_2.jpg`,
+        `/uploads/detection_event_3.jpg`,
+        `/uploads/detection_event_4.jpg`,
+        `/uploads/detection_event_5.jpg`
+      ];
+    }
+
+    // 3. simpan detection berserta image_urls array
     const detectionResult = await client.query(
-      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
       [
         reading_id,
         prediction.toUpperCase(),
         confidence || 0,
         verify_required,
         detection_status,
+        image_urls,
       ],
     );
     const detection_id = detectionResult.rows[0].detection_id;
-
-    if (image_base64) {
-      await client.query(
-        `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) VALUES ($1, $2, $3, $4)`,
-        [detection_id, `/uploads/detection_${detection_id}.jpg`, 1, true],
-      );
-    }
 
     // 5. create noti
     let notificationCreated = false;

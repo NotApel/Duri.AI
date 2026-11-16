@@ -10,11 +10,12 @@ const {
   route,
   transaction,
 } = require("./apiHelpers");
+
 const evidence = `SELECT d.*,to_char(d.detection_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time,sn.node_id,sn.node_name,sn.plot_id,fp.plot_name,
   sr.amplitude,sr.amplitude_unit,sr.frequency,sr.duration,
   COALESCE((SELECT ge.is_simulation FROM gateway_event ge WHERE ge.detection_id=d.detection_id),FALSE) AS is_simulation,
   sn.latitude AS node_latitude,sn.longitude AS node_longitude,sn.location_recorded_at,
-  COALESCE((SELECT json_agg(json_build_object('image_id',di.image_id::text,'detection_id',di.detection_id::text,'image_path',di.image_path,'storage_bucket',di.storage_bucket,'storage_path',di.storage_path,'sequence_number',di.sequence_number,'is_selected',di.is_selected) ORDER BY di.sequence_number,di.image_id) FROM detection_image di WHERE di.detection_id=d.detection_id),'[]') AS images,
+  COALESCE(d.image_urls, '{}') AS images,
   (SELECT row_to_json(f) FROM (SELECT df.feedback_id::text,df.category_id::text,df.correct_detection,df.comment_farmer,df.feedback_at,df.storage_bucket,df.storage_path,fc.category_name FROM detection_feedback df LEFT JOIN feedback_category fc ON fc.category_id=df.category_id
     WHERE df.detection_id=d.detection_id AND df.farmer_id=fp.farmer_id ORDER BY df.feedback_at DESC,df.feedback_id DESC LIMIT 1) f) AS farmer_feedback
   FROM detection d JOIN sensor_reading sr ON sr.reading_id=d.reading_id
@@ -31,11 +32,14 @@ function createDetectionRoutes(
       ? (await storage.signRows([row.farmer_feedback], farmerId))[0]
       : row.farmer_feedback,
   });
+
   const router = Router();
+
   router.use(["/detections", "/detection"], authenticate, (_req, res, next) => {
     res.set("Cache-Control", "no-store");
     next();
   });
+
   router.get(
     ["/detections", "/detection"],
     route(async (req, res) => {
@@ -102,6 +106,7 @@ function createDetectionRoutes(
       res.json({ items: resolved, next_cursor });
     }),
   );
+
   router.get(
     ["/detections/:detectionId", "/detection/:detectionId"],
     route(async (req, res) => {
@@ -114,6 +119,7 @@ function createDetectionRoutes(
       res.json(await signed(rows[0], req.farmer.id));
     }),
   );
+
   router.get(
     [
       "/detections/:detectionId/images",
@@ -138,7 +144,7 @@ function createDetectionRoutes(
       res.json(result);
     }),
   );
-  // Keep the dedicated feedback endpoint introduced on feature/seed-data.
+
   router.get(
     [
       "/detections/:detectionId/feedback",
@@ -160,6 +166,7 @@ function createDetectionRoutes(
       });
     }),
   );
+
   router.post(
     [
       "/detections/:detectionId/feedback",
@@ -296,6 +303,8 @@ function createDetectionRoutes(
       res.status(201).json(result);
     }),
   );
+
   return router;
 }
+
 module.exports = { createDetectionRoutes };
