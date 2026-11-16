@@ -30,19 +30,25 @@ app.use(cors({ origin: frontendOrigins, credentials: true }));
 
 // semak API key untuk esp32 jer
 const { legacyDevicesEnabled } = require("./deviceAuth");
-const legacyEnabled = legacyDevicesEnabled();
+
 const deviceAuth = (req, res, next) => {
-  if (!legacyEnabled)
+  // Semak secara dinamik setiap kali request diterima
+  if (!legacyDevicesEnabled()) {
     return res.status(410).json({
       error:
         "Legacy device routes are disabled. Use a provisioned gateway and POST /api/device/events.",
     });
+  }
+
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== process.env.DEVICE_API_KEY) {
     return res.status(401).json({ error: "Unauthorized: Invalid API Key" });
   }
+  
   next();
 };
+
+module.exports = deviceAuth;
 
 // Shared PostgreSQL configuration supports local DB_* and verified Supabase TLS.
 const pool = require("./db");
