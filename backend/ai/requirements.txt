@@ -1,0 +1,5 @@
+tensorflow
+supabase
+numpy
+pandas
+Pillow
