@@ -9,8 +9,8 @@ print("Starting Cloud-Based Self-Learning Retraining Pipeline on Render...")
 # 1. SUPABASE CONFIGURATION & DATASET DOWNLOAD
 # ============================================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 # Direktori sementara di server Render untuk proses training
 LOCAL_DATASET_DIR = "/tmp/dataset"
