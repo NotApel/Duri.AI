@@ -84,7 +84,7 @@ function createTrainingRoutes(pool, authenticate) {
   }
   const manualLimit = rateLimit({
     windowMs: 24 * 60 * 60 * 1000,
-    limit: 3,
+    limit: 10,
     keyGenerator: (req) => req.farmer.id,
     skipFailedRequests: true,
     standardHeaders: true,
