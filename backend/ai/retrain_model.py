@@ -47,7 +47,7 @@ download_folder_from_supabase("durian-dataset", "not-durian", LOCAL_NOT_DURIAN_D
 # ============================================================
 print("\nRetraining the Model with cloud dataset...")
 IMG_SIZE = (224, 224)
-BATCH_SIZE = 32 
+BATCH_SIZE = 8 
 EPOCHS = 2
 
 train_ds = tf.keras.utils.image_dataset_from_directory(
