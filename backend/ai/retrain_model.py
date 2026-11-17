@@ -1,63 +1,57 @@
 ﻿import os
-import glob
 import shutil
 import tensorflow as tf
+from supabase import create_client, Client
 
-print("Starting Self-Learning Retraining Pipeline...")
-
-# ============================================================
-# 1. STORAGE MANAGEMENT (SLIDING WINDOW)
-# ============================================================
-def apply_sliding_window(folder_path, max_images):
-    if not os.path.exists(folder_path):
-        return
-    images = [os.path.join(folder_path, f) for f in os.listdir(folder_path) 
-              if f.endswith(('.jpg', '.jpeg', '.png'))]
-    if len(images) > max_images:
-        images.sort(key=os.path.getmtime)
-        num_to_delete = len(images) - max_images
-        print(f"⚠️ Storage limit reached in {os.path.basename(folder_path)}. Pruning {num_to_delete} oldest images...")
-        for i in range(num_to_delete):
-            os.remove(images[i])
-            print(f"🗑️ Deleted old image: {os.path.basename(images[i])}")
+print("Starting Cloud-Based Self-Learning Retraining Pipeline on Render...")
 
 # ============================================================
-# 2. MOVE NEW FEEDBACK IMAGES
+# 1. SUPABASE CONFIGURATION & DATASET DOWNLOAD
 # ============================================================
-# KITA TUKAR PATH NI IKUT LAPTOP KAU
-feedback_dir = r"C:\durian proposal\Duri.AI-fresh\backend\feedback_images" 
-dataset_dir = r"C:\durian proposal\DuriAI_TFLite\dataset\not_durian"
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-if os.path.exists(feedback_dir):
-    new_images = [f for f in os.listdir(feedback_dir) if f.endswith('.jpg') or f.endswith('.png')]
-    if len(new_images) > 0:
-        for img in new_images:
-            shutil.move(os.path.join(feedback_dir, img), os.path.join(dataset_dir, img))
-            print(f"Moved {img} to training dataset.")
-    else:
-        print("No new feedback images to process.")
-else:
-    print("Feedback folder not found.")
+# Direktori sementara di server Render untuk proses training
+LOCAL_DATASET_DIR = "/tmp/dataset"
+LOCAL_DURIAN_DIR = os.path.join(LOCAL_DATASET_DIR, "durian")
+LOCAL_NOT_DURIAN_DIR = os.path.join(LOCAL_DATASET_DIR, "not_durian")
+
+os.makedirs(LOCAL_DURIAN_DIR, exist_ok=True)
+os.makedirs(LOCAL_NOT_DURIAN_DIR, exist_ok=True)
+
+def download_folder_from_supabase(bucket_name, remote_folder, local_folder):
+    print(f"Downloading {remote_folder} from Supabase Storage...")
+    try:
+        # Senaraikan fail dalam bucket Supabase
+        files = supabase.storage.from_(bucket_name).list(remote_folder)
+        for file in files:
+            file_name = file['name']
+            if file_name.endswith(('.jpg', '.jpeg', '.png')):
+                file_path = f"{remote_folder}/{file_name}"
+                res = supabase.storage.from_(bucket_name).download(file_path)
+                
+                local_file_path = os.path.join(local_folder, file_name)
+                with open(local_file_path, 'wb') as f:
+                    f.write(res)
+        print(f"Successfully downloaded {remote_folder}.")
+    except Exception as e:
+        print(f"Error downloading {remote_folder}: {e}")
+
+# Muat turun dataset dari Supabase Storage ke Render
+download_folder_from_supabase("durian-dataset", "durian", LOCAL_DURIAN_DIR)
+download_folder_from_supabase("durian-dataset", "not-durian", LOCAL_NOT_DURIAN_DIR)
 
 # ============================================================
-# 3. APPLY STORAGE LIMITS
+# 2. RETRAIN THE MODEL
 # ============================================================
-print("\nChecking dataset storage limits...")
-apply_sliding_window(r"C:\durian proposal\DuriAI_TFLite\dataset\not_durian", max_images=5000)
-apply_sliding_window(r"C:\durian proposal\DuriAI_TFLite\dataset\durian", max_images=3000)
-print("Storage check complete. Proceeding to training.")
-
-# ============================================================
-# 4. RETRAIN THE MODEL
-# ============================================================
-print("\nRetraining the Model with the new data...")
+print("\nRetraining the Model with cloud dataset...")
 IMG_SIZE = (224, 224)
-BATCH_SIZE = 64 
+BATCH_SIZE = 32 
 EPOCHS = 2
 
-# PERHATIKAN: Ada koma (,) selepas dataset
 train_ds = tf.keras.utils.image_dataset_from_directory(
-    r"C:\durian proposal\DuriAI_TFLite\dataset", 
+    LOCAL_DATASET_DIR, 
     validation_split=0.2,
     subset="training",
     seed=123,
@@ -66,7 +60,7 @@ train_ds = tf.keras.utils.image_dataset_from_directory(
 )
 
 val_ds = tf.keras.utils.image_dataset_from_directory(
-    r"C:\durian proposal\DuriAI_TFLite\dataset",
+    LOCAL_DATASET_DIR,
     validation_split=0.2,
     subset="validation",
     seed=123,
@@ -99,27 +93,35 @@ model.compile(
 print("Training...")
 history = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS)
 
-# ============================================================
-# NEW: EXTRACT REAL ACCURACY AND SAVE TO FILE
-# ============================================================
 final_accuracy = history.history['val_accuracy'][-1] * 100
-
-# TUKAR PATH ACCURACY KE LAPTOP KAU
-with open(r"C:\durian proposal\DuriAI_TFLite\accuracy.txt", "w") as f:
-    f.write(str(round(final_accuracy, 2)))
-
 print(f"Final Real Validation Accuracy: {final_accuracy:.2f}%")
 
+# Simpan tahap akurasi ke fail sementara
+with open("/tmp/accuracy.txt", "w") as f:
+    f.write(str(round(final_accuracy, 2)))
+
 # ============================================================
-# 5. EXPORT THE NEW TFLITE MODEL
+# 3. EXPORT & UPLOAD THE NEW TFLITE MODEL TO SUPABASE
 # ============================================================
 print("\nExporting new TFLite model...")
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 tflite_model = converter.convert()
 
-# Simpan model dalam folder projek kau
-with open(r"C:\durian proposal\DuriAI_TFLite\model_updated.tflite", 'wb') as f:
+local_model_path = "/tmp/model_updated.tflite"
+with open(local_model_path, 'wb') as f:
     f.write(tflite_model)
 
-print("Self-learning complete! New model saved as 'model_updated.tflite'")
+# Muat naik semula model baru ke Supabase Storage supaya sistem boleh guna
+try:
+    with open(local_model_path, 'rb') as f:
+        supabase.storage.from_("durian-dataset").upload(
+            path="model_updated.tflite",
+            file=f,
+            file_options={"upsert": "true"}
+        )
+    print("New model successfully uploaded to Supabase Storage!")
+except Exception as e:
+    print(f"Failed to upload model to Supabase: {e}")
+
+print("Cloud self-learning complete!")
