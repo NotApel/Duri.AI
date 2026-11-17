@@ -25,14 +25,17 @@ function createTrainingRoutes(pool, authenticate) {
       );
     if (state.status === "processing")
       fail(409, "Retraining is already in progress.");
+    
     state = {
       status: "processing",
       error: "",
       started_at: new Date().toISOString(),
       finished_at: null,
     };
+    
     const runId = {};
     activeRun = runId;
+    
     const finish = (status, error = "") => {
       if (activeRun !== runId) return;
       activeRun = null;
@@ -43,20 +46,25 @@ function createTrainingRoutes(pool, authenticate) {
         finished_at: new Date().toISOString(),
       };
     };
+
     try {
-      await access(process.env.PYTHON_PATH, constants.X_OK);
+      // Kita semak skrip python sahaja, biarkan python3 berjalan terus secara global
       await access(process.env.RETRAIN_SCRIPT_PATH, constants.R_OK);
+      
       const child = spawn(
-        process.env.PYTHON_PATH,
+        process.env.PYTHON_PATH || "python3",
         [process.env.RETRAIN_SCRIPT_PATH],
         { shell: false, stdio: "ignore" },
       );
-      child.once("error", () =>
+      
+      child.once("error", (err) => {
+        console.error("Spawn error:", err);
         finish(
           "failed",
           "The training process could not start. Check its configuration.",
-        ),
-      );
+        );
+      });
+      
       child.once("close", (code) =>
         finish(
           code === 0 ? "success" : "failed",
@@ -65,7 +73,8 @@ function createTrainingRoutes(pool, authenticate) {
             : "The training script failed. Run the configured script directly to inspect its errors.",
         ),
       );
-    } catch {
+    } catch (err) {
+      console.error("Access check error:", err);
       finish(
         "failed",
         "The configured training executable or script is unavailable.",
