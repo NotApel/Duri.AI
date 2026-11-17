@@ -2,19 +2,26 @@
 // guna node.js + postgres
 // so dlm ni urus semua API endpoint untuk frontend and hardware
 
-const express = require("express");
-const cors = require("cors");
 const dotenv = require("dotenv");
-const { createAuth, migrateAuth } = require("./auth");
-const { createFarmRoutes } = require("./farmRoutes");
-const { createDetectionRoutes } = require("./detectionRoutes");
-const app = express();
+dotenv.config(); // 1. Panggil dotenv paling atas sekali
 
-// baca something dari fail .env/ setup .env
-dotenv.config();
+const express = require("express");
+const app = express(); // 2. Wujudkan express app sekali sahaja di sini
+const cors = require("cors");
 
-// setup middleware
+// Shared PostgreSQL configuration supports local DB_* and verified Supabase TLS.
+const pool = require("./db");
+const { createStorage } = require("./storage");
+const { createPushRoutes, createPushWorker, pushConfig } = require("./push");
+const { createProcessedEventRoutes } = require("./processedEvents");
 
+const storage = createStorage();
+const push = pushConfig(process.env);
+const pushWorker = createPushWorker(pool, push);
+
+app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
+
+// Setup middleware asas
 // 1. CORS (bagi izin frontend (REACT) panggil API backend)
 const frontendOrigins = (
   process.env.FRONTEND_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173"
@@ -25,10 +32,14 @@ const frontendOrigins = (
 app.use(cors({ origin: frontendOrigins, credentials: true }));
 
 // 2. JSON parser (translate data JSON dari frontend ke (req.body))
+app.use(express.json({ limit: "50mb" }));
+
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 // middleware hardware: esp32 (Device API Key)
-
-// semak API key untuk esp32 jer
 const { legacyDevicesEnabled } = require("./deviceAuth");
 
 const deviceAuth = (req, res, next) => {
@@ -48,40 +59,27 @@ const deviceAuth = (req, res, next) => {
   next();
 };
 
-module.exports = deviceAuth;
+const { createAuth, migrateAuth } = require("./auth");
+const { createFarmRoutes } = require("./farmRoutes");
+const { createDetectionRoutes } = require("./detectionRoutes");
 
-// Shared PostgreSQL configuration supports local DB_* and verified Supabase TLS.
-const pool = require("./db");
-const { createStorage } = require("./storage");
-const { createPushRoutes, createPushWorker, pushConfig } = require("./push");
-const { createProcessedEventRoutes } = require("./processedEvents");
-const storage = createStorage();
-const push = pushConfig();
-const pushWorker = createPushWorker(pool, push);
-app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
-app.use("/api", (_req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  next();
-});
+// authentication router
+// handle login,register dari auth.js
+const { router: authRouter, authenticate: auth } = createAuth(pool);
+app.use("/api/auth", authRouter);
+app.use("/api", createPushRoutes(pool, auth, push));
+
 // Authenticate the Pi before parsing its bounded image payload.
 app.use("/api/device", createProcessedEventRoutes(pool, storage));
+
 // Retired device writes are rejected before parsing their large legacy bodies.
 app.use(
   ["/api/sensor-readings", "/api/device/detections", "/api/fusion-event"],
   (req, res, next) =>
     req.method === "POST" ? deviceAuth(req, res, next) : next(),
 );
-app.use(express.json({ limit: "50mb" }));
-
-// authentication router
-
-// handle login,register dari auth.js
-const { router: authRouter, authenticate: auth } = createAuth(pool);
-app.use("/api/auth", authRouter);
-app.use("/api", createPushRoutes(pool, auth, push));
 
 // check health
-
 // check backend hidup n connected x?
 app.get("/api/health", async (req, res) => {
   try {
@@ -98,7 +96,6 @@ app.get("/api/health", async (req, res) => {
 });
 
 // 1. farmer endpoint - table farmer
-
 // dpt profil farmer yang sedang login
 app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
   try {
@@ -141,7 +138,6 @@ app.use("/api", createFarmRoutes(pool, auth, deviceAuth));
 app.use("/api", createDetectionRoutes(pool, auth, storage));
 
 // Farmer sessions can review detections, but cannot assert machine predictions.
-// Keep a clear migration response on both old write aliases; GET/feedback stay available.
 app.post(["/api/detection", "/api/detections"], auth, (_req, res) =>
   res.status(410).json({
     error:
@@ -149,10 +145,7 @@ app.post(["/api/detection", "/api/detections"], auth, (_req, res) =>
   }),
 );
 
-// 5. detection image endpoints - table detection-image
-
 // 6. feedback category endpoints - table feedback category
-
 // dpt senarai feedback category
 app.get(
   ["/api/feedback-category", "/api/feedback-categories"],
@@ -170,7 +163,6 @@ app.get(
 );
 
 // 7. detection feedback endpoints - table detection feedback
-
 app.get(
   ["/api/training-queue", "/api/training_queue"],
   auth,
@@ -187,8 +179,7 @@ app.get(
   },
 );
 
-// 9. notification endpoint - table notfication
-
+// 9. notification endpoint - table notification
 // dpt all the noti
 app.get(["/api/notification", "/api/notifications"], auth, async (req, res) => {
   try {
@@ -228,7 +219,6 @@ app.patch("/api/notifications/:notificationId/read", auth, async (req, res) => {
 });
 
 // 10. analytics endpoint
-
 // dpt analytics stat
 app.get("/api/analytics/stats", auth, async (req, res) => {
   try {
@@ -302,8 +292,6 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
 });
 
 // 12. image detection endpoint - esp32 cam
-
-// hardware hantar gambar n prediction (Diselaraskan simpan 5 URL dalam 1 kolum image_urls)
 app.post("/api/device/detections", deviceAuth, async (req, res) => {
   let client;
   try {
@@ -325,7 +313,6 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
 
     const reading_id = readingQuery.rows[0].reading_id;
 
-    // Sediakan 5 URL imej dalam bentuk array (text[])
     let image_urls = [];
     if (image_base64) {
       image_urls = [
@@ -356,8 +343,6 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
 });
 
 // 13. sensor fusion endpoint - vibrate + cam
-
-// gabung 2 sensor (Diselaraskan simpan 5 URL dalam 1 kolum image_urls)
 app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   let client;
   try {
@@ -369,7 +354,6 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     client = await pool.connect();
     await client.query("BEGIN");
 
-    // 1. simpan result vibration
     const readingResult = await client.query(
       `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
        VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
@@ -377,36 +361,28 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    // 2. logik 2 sensor
-
-    const CONFIDENCE_THRESHOLD = 90.0; // Threshold keyakinan AI
+    const CONFIDENCE_THRESHOLD = 90.0;
 
     let detection_status = "PENDING";
     let verify_required = true;
 
-    // 1. AI yakin > 90% DAN ia DURIAN
     if (
       prediction.toUpperCase() === "DURIAN" &&
       confidence >= CONFIDENCE_THRESHOLD
     ) {
       detection_status = "VERIFIED";
       verify_required = false;
-    }
-    // 2. AI yakin > 90% TAPI ia BUKAN DURIAN
-    else if (
+    } else if (
       prediction.toUpperCase() !== "DURIAN" &&
       confidence >= CONFIDENCE_THRESHOLD
     ) {
       detection_status = "REJECTED";
       verify_required = false;
-    }
-    // 3. AI tak cukup yakin (< 90%), tak kira apa prediction
-    else {
+    } else {
       detection_status = "PENDING";
       verify_required = true;
     }
 
-    // Sediakan 5 URL imej dalam bentuk array (text[])
     let image_urls = [];
     if (image_base64) {
       image_urls = [
@@ -418,7 +394,6 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
       ];
     }
 
-    // 3. simpan detection berserta image_urls array
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
       [
@@ -432,7 +407,6 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 5. create noti
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
       const farmerQuery = await client.query(
@@ -473,8 +447,6 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
 });
 
 // 404 NOT FOUND & ERROR HANDLER
-
-//if route x wujud :
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
@@ -496,6 +468,7 @@ app.use((err, req, res, next) => {
 const PORT = Number(process.env.PORT || 3000);
 let server;
 let stopping = false;
+
 async function shutdown() {
   if (stopping) return;
   stopping = true;
@@ -510,6 +483,7 @@ async function shutdown() {
   await pool.end();
   clearTimeout(force);
 }
+
 async function start() {
   try {
     await migrateAuth(pool);
@@ -540,4 +514,54 @@ async function start() {
     process.exitCode = 1;
   }
 }
+
 start();
+
+// ============================================================
+// TEST PUSH NOTIFICATION ENDPOINT
+// ============================================================
+app.post("/api/test-push", auth, async (req, res) => {
+  try {
+    // 1. Cari langganan push untuk farmer yang sedang login
+    const subResult = await pool.query(
+      "SELECT * FROM push_subscription WHERE farmer_id = $1 LIMIT 1",
+      [req.farmer.id]
+    );
+
+    if (subResult.rows.length === 0) {
+      return res.status(404).json({ error: "Tiada peranti yang melanggan push notification untuk akaun ini." });
+    }
+
+    const sub = subResult.rows[0];
+
+    // 2. Hantar test push notification menggunakan web-push
+    const webPush = require("web-push");
+    const pushPayload = JSON.stringify({
+      title: "Ujian Duri.AI! 🍈",
+      body: "Berjaya! Notifikasi pop-up anda berfungsi dengan cemerlang.",
+      url: "/map",
+    });
+
+    const pushOptions = {
+      vapidDetails: {
+        subject: process.env.VAPID_SUBJECT,
+        publicKey: process.env.VAPID_PUBLIC_KEY,
+        privateKey: process.env.VAPID_PRIVATE_KEY,
+      },
+    };
+
+    await webPush.sendNotification(
+      {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.p256dh, auth: sub.auth },
+      },
+      pushPayload,
+      pushOptions
+    );
+
+    res.json({ success: true, message: "Notifikasi ujian berjaya dihantar ke pelayar web anda!" });
+  } catch (error) {
+    console.error("Test push error:", error);
+    res.status(500).json({ error: "Gagal menghantar notifikasi ujian", details: error.message });
+  }
+});

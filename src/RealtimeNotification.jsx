@@ -19,7 +19,7 @@ export default function RealtimeNotification() {
         'postgres_changes',
         {
           event: 'INSERT',      // Tangkap bila ada rekod BARU masuk
-          schema: 'public',     
+          schema: 'public',    
           table: 'notification', 
         },
         (payload) => {
@@ -48,7 +48,7 @@ export default function RealtimeNotification() {
           🚨 {incomingAlert.title || 'Amaran Durian Jatuh!'}
         </h2>
         <p style={{ fontSize: '16px', lineHeight: '1.5', color: '#ddd' }}>
-          {incomingAlert.message}
+          {incomingAlert.message || incomingAlert.message_noti}
         </p>
         <button 
           style={styles.button}
@@ -61,7 +61,7 @@ export default function RealtimeNotification() {
   );
 }
 
-// Gaya rekaan paparan (Dark Aesthetic)
+// Gaya rekaan paparan (Dark Aesthetic yang lengkap)
 const styles = {
   overlay: {
     position: 'fixed',
@@ -71,4 +71,25 @@ const styles = {
     zIndex: 9999,
   },
   card: {
-        backgroundColor: '#161622', color: '#ffffff',}}
+    backgroundColor: '#161622', 
+    color: '#ffffff',
+    padding: '30px',
+    borderRadius: '12px',
+    maxWidth: '450px',
+    width: '90%',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    border: '2px solid #ff4757',
+    textAlign: 'center'
+  },
+  button: {
+    backgroundColor: '#ff4757',
+    color: '#ffffff',
+    border: 'none',
+    padding: '10px 20px',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    marginTop: '15px'
+  }
+};

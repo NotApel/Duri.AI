@@ -4,6 +4,7 @@ import { demoDetections } from "../data/demoDetections";
 import { apiRequest, fetchTraining } from "../services/api";
 import HarvestChart from "./HarvestChart";
 import { defaultDataSource } from "../services/dataSource";
+import RealtimeNotification from '../RealtimeNotification';
 
 const demoNodes = [
   {
