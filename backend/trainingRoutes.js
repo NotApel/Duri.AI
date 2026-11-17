@@ -54,25 +54,30 @@ function createTrainingRoutes(pool, authenticate) {
       const child = spawn(
         process.env.PYTHON_PATH || "python3",
         [process.env.RETRAIN_SCRIPT_PATH],
-        { shell: false, stdio: "ignore" },
+        { shell: false, stdio: "pipe" }, // Ubah dari 'ignore' ke 'pipe' supaya kita boleh baca ralatnya
       );
-      
+
+      // Tangkap apa sahaja mesej ralat dari skrip Python
+      child.stderr.on("data", (data) => {
+        console.error(`PYTHON ERROR: ${data.toString()}`);
+      });
+
+      child.stdout.on("data", (data) => {
+        console.log(`PYTHON OUTPUT: ${data.toString()}`);
+      });
+
       child.once("error", (err) => {
-        console.error("Spawn error:", err);
-        finish(
-          "failed",
-          "The training process could not start. Check its configuration.",
-        );
+        console.error("Process spawn failed:", err);
+        finish("failed", "The training process could not start.");
       });
       
-      child.once("close", (code) =>
+      child.once("close", (code) => {
+        console.log(`Python process exited with code ${code}`);
         finish(
           code === 0 ? "success" : "failed",
-          code === 0
-            ? ""
-            : "The training script failed. Run the configured script directly to inspect its errors.",
-        ),
-      );
+          code === 0 ? "" : "The training script failed."
+        );
+      });
     } catch (err) {
       console.error("Access check error:", err);
       finish(
