@@ -23,7 +23,6 @@ os.makedirs(LOCAL_NOT_DURIAN_DIR, exist_ok=True)
 def download_folder_from_supabase(bucket_name, remote_folder, local_folder):
     print(f"Downloading {remote_folder} from Supabase Storage...")
     try:
-        # Senaraikan fail dalam bucket Supabase
         files = supabase.storage.from_(bucket_name).list(remote_folder)
         for file in files:
             file_name = file['name']
@@ -43,10 +42,10 @@ download_folder_from_supabase("durian-dataset", "durian", LOCAL_DURIAN_DIR)
 download_folder_from_supabase("durian-dataset", "not-durian", LOCAL_NOT_DURIAN_DIR)
 
 # ============================================================
-# 2. RETRAIN THE MODEL
+# 2. RETRAIN THE MODEL (OPTIMIZED FOR RENDER FREE TIER)
 # ============================================================
 print("\nRetraining the Model with cloud dataset...")
-IMG_SIZE = (224, 224)
+IMG_SIZE = (128, 128)  # Diturunkan ke 128x128 untuk jimat RAM
 BATCH_SIZE = 8 
 EPOCHS = 1
 
@@ -68,9 +67,14 @@ val_ds = tf.keras.utils.image_dataset_from_directory(
     batch_size=BATCH_SIZE
 )
 
+# Pengoptimuman memori: Prefetch & Cache supaya RAM tidak cepat penuh
+AUTOTUNE = tf.data.AUTOTUNE
+train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
 print("Building model...")
 base_model = tf.keras.applications.MobileNetV2(
-    input_shape=(224, 224, 3),
+    input_shape=(128, 128, 3), # Selaraskan saiz input dengan IMG_SIZE
     include_top=False,
     weights='imagenet'
 )
@@ -96,7 +100,6 @@ history = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS)
 final_accuracy = history.history['val_accuracy'][-1] * 100
 print(f"Final Real Validation Accuracy: {final_accuracy:.2f}%")
 
-# Simpan tahap akurasi ke fail sementara
 with open("/tmp/accuracy.txt", "w") as f:
     f.write(str(round(final_accuracy, 2)))
 
@@ -112,7 +115,6 @@ local_model_path = "/tmp/model_updated.tflite"
 with open(local_model_path, 'wb') as f:
     f.write(tflite_model)
 
-# Muat naik semula model baru ke Supabase Storage supaya sistem boleh guna
 try:
     with open(local_model_path, 'rb') as f:
         supabase.storage.from_("durian-dataset").upload(
