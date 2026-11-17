@@ -5,6 +5,7 @@ import { useFarmList } from "../services/useFarmList";
 import { markBackendRead } from "../services/farmApi";
 import { farmDate } from "../services/farmData";
 import { FarmListState } from "./FarmControls";
+import RealtimeNotification from "../RealtimeNotification";
 export default function Notifications() {
   const { mode, state, dispatch, farmerId, online } = useFarm();
   const backend = useFarmList("notifications", farmerId, mode === "backend");
@@ -58,6 +59,7 @@ export default function Notifications() {
   }
   return (
     <>
+    <RealtimeNotification />
       <div className="farm-toolbar">
         <label className="ui-field" htmlFor="notification-filter">
           Show notifications
