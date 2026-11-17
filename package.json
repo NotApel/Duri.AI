@@ -18,6 +18,7 @@
     "test:pwa": "node tests/cloudPwa.browser.cjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "@tailwindcss/vite": "^4.3.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
