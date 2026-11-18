@@ -137,6 +137,47 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth, async (req, res) => {
   }
 });
 
+// ============================================================
+// GAMBAR DETECTION
+// Bucket 'durian-captures' ialah PUBLIC, jadi guna URL dalam
+// detection_image terus (tak perlu signing).
+// MESTI diletak SEBELUM createDetectionRoutes supaya route ini
+// yang jawab dulu (Express jawab ikut turutan).
+// ============================================================
+app.get("/api/detections/:id/images", auth, async (req, res) => {
+  try {
+    const detectionId = Number(req.params.id);
+    if (!Number.isSafeInteger(detectionId))
+      return res.status(400).json({ error: "Invalid detection ID." });
+
+    // Pastikan detection ni milik farmer yang login
+    const owned = await pool.query(
+      `SELECT 1
+         FROM detection d
+         JOIN sensor_reading sr ON sr.reading_id = d.reading_id
+         JOIN sensor_node sn ON sn.node_id = sr.node_id
+         JOIN farm_plot fp ON fp.plot_id = sn.plot_id
+        WHERE d.detection_id = $1 AND fp.farmer_id = $2`,
+      [detectionId, req.farmer.id],
+    );
+    if (!owned.rows.length)
+      return res.status(404).json({ error: "Detection not found." });
+
+    const result = await pool.query(
+      `SELECT image_id, image_path, sequence_number, is_selected
+         FROM detection_image
+        WHERE detection_id = $1
+        ORDER BY sequence_number ASC`,
+      [detectionId],
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch detection images error:", err.message);
+    res.status(500).json({ error: "Failed to fetch detection images" });
+  }
+});
+
 // Farm configuration, device locations and detection history.
 app.use("/api", createFarmRoutes(pool, auth, deviceAuth));
 app.use("/api", createDetectionRoutes(pool, auth, storage));
@@ -569,34 +610,53 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
   }
 });
 
-// Tambah endpoint ini di dalam app.js utama supaya frontend boleh tarik senarai gambar
-app.get('/api/detections/:id/images', auth, async (req, res) => {
+// ============================================================
+// TEST PUSH NOTIFICATION ENDPOINT
+// (Dipindahkan sebelum handler 404 supaya boleh dicapai)
+// ============================================================
+app.post("/api/test-push", auth, async (req, res) => {
   try {
-    const detectionId = req.params.id;
+    // 1. Cari langganan push untuk farmer yang sedang login
+    const subResult = await pool.query(
+      "SELECT * FROM push_subscription WHERE farmer_id = $1 LIMIT 1",
+      [req.farmer.id]
+    );
 
-    const { data, error } = await supabaseAdmin
-      .from('detection_image')
-      .select('image_id, detection_id, image_path, sequence_number, is_selected')
-      .eq('detection_id', detectionId)
-      .order('sequence_number', { ascending: true });
-
-    if (error) {
-      console.error('[ERROR - FETCH IMAGES]:', error.message);
-      return res.status(500).json({ error: error.message });
+    if (subResult.rows.length === 0) {
+      return res.status(404).json({ error: "Tiada peranti yang melanggan push notification untuk akaun ini." });
     }
 
-    const formattedImages = (data || []).map(img => ({
-      id: img.image_id,
-      path: img.image_path,
-      url: img.image_path,
-      sequence: img.sequence_number,
-      isSelected: img.is_selected
-    }));
+    const sub = subResult.rows[0];
 
-    return res.status(200).json(formattedImages);
-  } catch (err) {
-    console.error('[CRITICAL ERROR - FETCH IMAGES]:', err);
-    return res.status(500).json({ error: "Failed to fetch detection images" });
+    // 2. Hantar test push notification menggunakan web-push
+    const webPush = require("web-push");
+    const pushPayload = JSON.stringify({
+      title: "Ujian Duri.AI! 🍈",
+      body: "Berjaya! Notifikasi pop-up anda berfungsi dengan cemerlang.",
+      url: "/map",
+    });
+
+    const pushOptions = {
+      vapidDetails: {
+        subject: process.env.VAPID_SUBJECT,
+        publicKey: process.env.VAPID_PUBLIC_KEY,
+        privateKey: process.env.VAPID_PRIVATE_KEY,
+      },
+    };
+
+    await webPush.sendNotification(
+      {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.p256dh, auth: sub.auth },
+      },
+      pushPayload,
+      pushOptions
+    );
+
+    res.json({ success: true, message: "Notifikasi ujian berjaya dihantar ke pelayar web anda!" });
+  } catch (error) {
+    console.error("Test push error:", error);
+    res.status(500).json({ error: "Gagal menghantar notifikasi ujian", details: error.message });
   }
 });
 
@@ -670,52 +730,3 @@ async function start() {
 }
 
 start();
-
-// ============================================================
-// TEST PUSH NOTIFICATION ENDPOINT
-// ============================================================
-app.post("/api/test-push", auth, async (req, res) => {
-  try {
-    // 1. Cari langganan push untuk farmer yang sedang login
-    const subResult = await pool.query(
-      "SELECT * FROM push_subscription WHERE farmer_id = $1 LIMIT 1",
-      [req.farmer.id]
-    );
-
-    if (subResult.rows.length === 0) {
-      return res.status(404).json({ error: "Tiada peranti yang melanggan push notification untuk akaun ini." });
-    }
-
-    const sub = subResult.rows[0];
-
-    // 2. Hantar test push notification menggunakan web-push
-    const webPush = require("web-push");
-    const pushPayload = JSON.stringify({
-      title: "Ujian Duri.AI! 🍈",
-      body: "Berjaya! Notifikasi pop-up anda berfungsi dengan cemerlang.",
-      url: "/map",
-    });
-
-    const pushOptions = {
-      vapidDetails: {
-        subject: process.env.VAPID_SUBJECT,
-        publicKey: process.env.VAPID_PUBLIC_KEY,
-        privateKey: process.env.VAPID_PRIVATE_KEY,
-      },
-    };
-
-    await webPush.sendNotification(
-      {
-        endpoint: sub.endpoint,
-        keys: { p256dh: sub.p256dh, auth: sub.auth },
-      },
-      pushPayload,
-      pushOptions
-    );
-
-    res.json({ success: true, message: "Notifikasi ujian berjaya dihantar ke pelayar web anda!" });
-  } catch (error) {
-    console.error("Test push error:", error);
-    res.status(500).json({ error: "Gagal menghantar notifikasi ujian", details: error.message });
-  }
-});
