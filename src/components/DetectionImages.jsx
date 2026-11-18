@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { API_URL } from "../services/api";
 import { fetchDetectionImages } from "../services/detectionApi";
 
-// Di-update terus di sini supaya terus terima URL Supabase tanpa cantum API_URL
+// Terima format backend (id/path/url/sequence/isSelected)
+// DAN format DB (image_id/image_path/sequence_number/is_selected).
 export function normalizeImages(rows, apiUrl) {
   if (!Array.isArray(rows)) return [];
 
@@ -12,6 +13,7 @@ export function normalizeImages(rows, apiUrl) {
         row.url || row.path || row.image_path || row.image_url || "";
       if (!imagePath) return null;
 
+      // URL penuh (Supabase Storage) guna terus, selain tu cantum dengan API_URL
       const imageUrl = /^https?:\/\//.test(imagePath)
         ? imagePath
         : `${apiUrl.replace(/\/$/, "")}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
@@ -41,35 +43,24 @@ export default function DetectionImages({ event }) {
     const controller = new AbortController();
     async function load() {
       setResult({ images: [], loading: true, error: "" });
+      setSelected(0);
       try {
-        export function normalizeImages(rows, apiUrl) {
-  if (!Array.isArray(rows)) return [];
-
-  return rows
-    .map((row, index) => {
-      const imagePath =
-        row.url || row.path || row.image_path || row.image_url || "";
-      if (!imagePath) return null;
-
-      const imageUrl = /^https?:\/\//.test(imagePath)
-        ? imagePath
-        : `${apiUrl.replace(/\/$/, "")}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
-
-      return {
-        id: row.image_id ?? row.id ?? index + 1,
-        sequence: row.sequence_number ?? row.sequence ?? index + 1,
-        url: imageUrl,
-        isSelected: row.is_selected ?? row.isSelected ?? index === 0,
-      };
-    })
-    .filter(Boolean);
-}
+        // FIX: array kosong [] bukan "ada data". Hanya guna event.images
+        // kalau ada isi, kalau tak fetch dari /api/detections/:id/images
+        const hasInline =
+          Array.isArray(event.images) && event.images.length > 0;
+        const rows =
+          !attempt && hasInline
+            ? event.images
+            : await fetchDetectionImages(event.id, {
                 signal: controller.signal,
               });
+
         if (Array.isArray(rows) && rows.some((row) => row.image_error))
           throw new Error(
             "Image access is temporarily unavailable. Please retry.",
           );
+
         const images = normalizeImages(rows, API_URL);
         if (!controller.signal.aborted)
           setResult({ images, loading: false, error: "" });
@@ -100,10 +91,18 @@ export default function DetectionImages({ event }) {
           </button>
         </div>
       ) : !image ? (
-        <p>
-          Camera image unavailable. No usable image was supplied for this
-          detection.
-        </p>
+        <div role="status">
+          <p>
+            Camera image unavailable. No usable image was supplied for this
+            detection.
+          </p>
+          <button
+            className="ui-button"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
+            Retry images
+          </button>
+        </div>
       ) : (
         <>
           <figure>
