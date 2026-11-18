@@ -12,11 +12,11 @@ const app = express(); // 2. Wujudkan express app sekali sahaja di sini
 const { createClient } = require("@supabase/supabase-js");
 const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const cors = require("cors");
-
+const enabled = env.PUSH_ENABLED === "true";
 // Shared PostgreSQL configuration supports local DB_* and verified Supabase TLS.
 const pool = require("./db");
 const { createStorage } = require("./storage");
-const { createPushRoutes, createPushWorker, pushConfig } = require("./push");
+const { createPushRoutes, createPushWorker, pushConfig, enqueueNotification } = require("./push");
 const { createProcessedEventRoutes } = require("./processedEvents");
 
 const storage = createStorage();
@@ -557,11 +557,12 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
         image_urls.push(publicUrl);
 
         // A. Masukkan ke table detection_image (Supaya fetchDetectionImages() frontend boleh baca)
-        await client.query(
-          `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) 
-           VALUES ($1, $2, $3, $4)`,
-          [detection_id, publicUrl, i + 1, i === 0]
-        );
+              await client.query(
+        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [detection_id, targetFarmerId, notiTitle, notiMessage, false]
+      );
+      notificationCreated = true;
 
       } else {
         console.error("Gagal upload gambar:", storageError.message);
@@ -601,12 +602,20 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
         ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.` 
         : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
 
-      await client.query(
+            // 1. Masukkan ke table notification dan ambil ID dia
+      const notifResult = await client.query(
         `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
         [detection_id, targetFarmerId, notiTitle, notiMessage, false]
       );
+      const newNotificationId = notifResult.rows[0].notification_id;
+      
+      // 2. MASUKKAN KE QUEUE (Ini yang trigger worker hantar ke phone)
+      await enqueueNotification(client, newNotificationId, targetFarmerId);
+      
       notificationCreated = true;
+      console.log(`  [NOTIFICATION] Created and queued for push successfully!`);
+
       console.log(`  [NOTIFICATION] Created successfully for farmer_id: ${targetFarmerId}`);
     } else {
       console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
