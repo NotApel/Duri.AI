@@ -6,27 +6,24 @@ import { fetchDetectionImages } from "../services/detectionApi";
 export function normalizeImages(rows, apiUrl) {
   if (!Array.isArray(rows)) return [];
 
-  return rows.map((row, index) => {
-    let imagePath = row.image_path || row.image_url || "";
-    let imageUrl = "";
+  return rows
+    .map((row, index) => {
+      const imagePath =
+        row.url || row.path || row.image_path || row.image_url || "";
+      if (!imagePath) return null;
 
-    // Semak sama ada imagePath sudah menjadi URL penuh (seperti dari Supabase Storage)
-    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
-  imageUrl = imagePath; // Guna terus URL Supabase tanpa cantum API_URL
-} else {
-      // Jika laluan lokal biasa, barulah cantum dengan API_URL
-      const cleanApiUrl = apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl;
-      const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
-      imageUrl = `${cleanApiUrl}${cleanPath}`;
-    }
+      const imageUrl = /^https?:\/\//.test(imagePath)
+        ? imagePath
+        : `${apiUrl.replace(/\/$/, "")}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
 
-    return {
-      id: row.image_id || index + 1,
-      sequence: row.sequence_number || index + 1,
-      url: imageUrl,
-      isSelected: row.is_selected ?? (index === 0),
-    };
-  });
+      return {
+        id: row.image_id ?? row.id ?? index + 1,
+        sequence: row.sequence_number ?? row.sequence ?? index + 1,
+        url: imageUrl,
+        isSelected: row.is_selected ?? row.isSelected ?? index === 0,
+      };
+    })
+    .filter(Boolean);
 }
 
 export default function DetectionImages({ event }) {
@@ -45,10 +42,28 @@ export default function DetectionImages({ event }) {
     async function load() {
       setResult({ images: [], loading: true, error: "" });
       try {
-        const rows =
-          !attempt && Array.isArray(event.images)
-            ? event.images
-            : await fetchDetectionImages(event.id, {
+        export function normalizeImages(rows, apiUrl) {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .map((row, index) => {
+      const imagePath =
+        row.url || row.path || row.image_path || row.image_url || "";
+      if (!imagePath) return null;
+
+      const imageUrl = /^https?:\/\//.test(imagePath)
+        ? imagePath
+        : `${apiUrl.replace(/\/$/, "")}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+
+      return {
+        id: row.image_id ?? row.id ?? index + 1,
+        sequence: row.sequence_number ?? row.sequence ?? index + 1,
+        url: imageUrl,
+        isSelected: row.is_selected ?? row.isSelected ?? index === 0,
+      };
+    })
+    .filter(Boolean);
+}
                 signal: controller.signal,
               });
         if (Array.isArray(rows) && rows.some((row) => row.image_error))
