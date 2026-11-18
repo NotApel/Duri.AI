@@ -83,12 +83,12 @@ function createTrainingRoutes(pool, authenticate) {
         return fail(409, "Retraining sedang berjalan atau sudah di-request.");
       }
 
-      // 1. Update status di Supabase
+      // Update status di Supabase
       const { error } = await supabase
         .from('ai_status')
         .update({ 
           status: 'requested', 
-          message: 'Menghantar arahan ke GitHub Actions...', // Mesej baru
+          message: 'Menghantar arahan ke GitHub Actions...',
           progress: 0,
           updated_at: new Date().toISOString()
         })
@@ -96,7 +96,7 @@ function createTrainingRoutes(pool, authenticate) {
 
       if (error) return fail(500, "Gagal update Supabase: " + error.message);
 
-            // 2. Tembak API GitHub Actions
+      // Tembak API GitHub Actions
       try {
         const GITHUB_REPO = "NotApel/Duri.AI"; 
         
@@ -115,7 +115,6 @@ function createTrainingRoutes(pool, authenticate) {
         );
 
         if (!ghRes.ok) {
-          // Ambil mesej error sebenar dari GitHub untuk log
           const errorData = await ghRes.json().catch(() => ({}));
           console.error("GitHub Response:", ghRes.status, errorData);
           throw new Error(`GitHub API error: ${ghRes.status} - ${errorData.message || 'Unknown'}`);
@@ -124,10 +123,12 @@ function createTrainingRoutes(pool, authenticate) {
         res.status(202).json({ message: "Arahan berjaya dihantar ke GitHub Actions!" });
       } catch (err) {
         console.error("GitHub Trigger Error:", err.message);
-        // Kalau GitHub gagal, reset status supaya user boleh try lagi
         await supabase.from('ai_status').update({ status: 'failed', message: 'Gagal trigger GitHub Actions.' }).eq('id', 1);
         return fail(500, "Gagal trigger GitHub Actions: " + err.message);
       }
+    })
+  );
+
   return router;
 }
 
