@@ -612,6 +612,24 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
     }
 
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      message: "Event processed successfully",
+      detection_id: detection_id,
+      notification_triggered: notificationCreated,
+      images_uploaded: image_urls.length
+    });
+
+  } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("Bridge Error:", err);
+    res.status(500).json({ error: "Failed to process event" });
+  } finally {
+    client?.release();
+  }
+}); // <-- KURUNGAN PENUTUP UNTUK app.post('/api/upload-event') YANG TERTINGGAL SEBELUM NI
+
 // ============================================================
 // TEST PUSH NOTIFICATION ENDPOINT
 // (Dipindahkan sebelum handler 404 supaya boleh dicapai)
