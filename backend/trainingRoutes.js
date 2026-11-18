@@ -96,10 +96,8 @@ function createTrainingRoutes(pool, authenticate) {
 
       if (error) return fail(500, "Gagal update Supabase: " + error.message);
 
-      // 2. Tembak API GitHub Actions
+            // 2. Tembak API GitHub Actions
       try {
-        // ⚠️ TUKAR BAHAGIAN INI DENGAN USERNAME & NAMA REPO GITHUB KAU
-        // (Contoh: kalau URL repo kau github.com/NotApel/Duri.AI, tulis "NotApel/Duri.AI")
         const GITHUB_REPO = "NotApel/Duri.AI"; 
         
         const ghRes = await fetch(
@@ -112,22 +110,24 @@ function createTrainingRoutes(pool, authenticate) {
               "X-GitHub-Api-Version": "2022-11-28",
               "User-Agent": "DuriAI-Backend"
             },
-            body: JSON.stringify({ ref: "main" }) // Pastikan branch kau "main" atau "master"
+            body: JSON.stringify({ ref: "main" }) 
           }
         );
 
-        if (!ghRes.ok) throw new Error(`GitHub API error: ${ghRes.status}`);
+        if (!ghRes.ok) {
+          // Ambil mesej error sebenar dari GitHub untuk log
+          const errorData = await ghRes.json().catch(() => ({}));
+          console.error("GitHub Response:", ghRes.status, errorData);
+          throw new Error(`GitHub API error: ${ghRes.status} - ${errorData.message || 'Unknown'}`);
+        }
 
         res.status(202).json({ message: "Arahan berjaya dihantar ke GitHub Actions!" });
       } catch (err) {
-        console.error("GitHub Trigger Error:", err);
+        console.error("GitHub Trigger Error:", err.message);
         // Kalau GitHub gagal, reset status supaya user boleh try lagi
         await supabase.from('ai_status').update({ status: 'failed', message: 'Gagal trigger GitHub Actions.' }).eq('id', 1);
         return fail(500, "Gagal trigger GitHub Actions: " + err.message);
       }
-    })
-  );
-
   return router;
 }
 
