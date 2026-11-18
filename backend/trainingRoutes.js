@@ -47,7 +47,7 @@ function createTrainingRoutes(pool, authenticate) {
         retraining_available: true,
         worker: { status: cloudStatus }, 
         weekly_schedule: null,
-        evaluation_note: "Training is securely handled via Google Colab & Supabase Storage.",
+        evaluation_note: "Training is securely handled via GitHub Actions & Supabase Storage.",
       });
     })
   );
@@ -63,7 +63,7 @@ function createTrainingRoutes(pool, authenticate) {
     })
   );
 
-  // 3. ENDPOINT BUTANG RETRAIN
+  // 3. ENDPOINT BUTANG RETRAIN (Trigger GitHub Actions)
   const manualLimit = rateLimit({
     windowMs: 24 * 60 * 60 * 1000,
     limit: 10,
@@ -83,11 +83,12 @@ function createTrainingRoutes(pool, authenticate) {
         return fail(409, "Retraining sedang berjalan atau sudah di-request.");
       }
 
+      // 1. Update status di Supabase
       const { error } = await supabase
         .from('ai_status')
         .update({ 
           status: 'requested', 
-          message: 'Menunggu Colab ambil tugas...',
+          message: 'Menghantar arahan ke GitHub Actions...', // Mesej baru
           progress: 0,
           updated_at: new Date().toISOString()
         })
@@ -95,7 +96,35 @@ function createTrainingRoutes(pool, authenticate) {
 
       if (error) return fail(500, "Gagal update Supabase: " + error.message);
 
-      res.status(202).json({ message: "Arahan dihantar ke Colab!" });
+      // 2. Tembak API GitHub Actions
+      try {
+        // ⚠️ TUKAR BAHAGIAN INI DENGAN USERNAME & NAMA REPO GITHUB KAU
+        // (Contoh: kalau URL repo kau github.com/NotApel/Duri.AI, tulis "NotApel/Duri.AI")
+        const GITHUB_REPO = "NotApel/Duri.AI"; 
+        
+        const ghRes = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/retrain-ai.yml/dispatches`,
+          {
+            method: "POST",
+            headers: {
+              "Accept": "application/vnd.github+json",
+              "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`,
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "DuriAI-Backend"
+            },
+            body: JSON.stringify({ ref: "main" }) // Pastikan branch kau "main" atau "master"
+          }
+        );
+
+        if (!ghRes.ok) throw new Error(`GitHub API error: ${ghRes.status}`);
+
+        res.status(202).json({ message: "Arahan berjaya dihantar ke GitHub Actions!" });
+      } catch (err) {
+        console.error("GitHub Trigger Error:", err);
+        // Kalau GitHub gagal, reset status supaya user boleh try lagi
+        await supabase.from('ai_status').update({ status: 'failed', message: 'Gagal trigger GitHub Actions.' }).eq('id', 1);
+        return fail(500, "Gagal trigger GitHub Actions: " + err.message);
+      }
     })
   );
 
