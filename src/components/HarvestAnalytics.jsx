@@ -155,6 +155,7 @@ export default function HarvestAnalytics() {
             <option value="">All types</option>
             <option value="DURIAN">Durian</option>
             <option value="NOT_DURIAN">Not durian</option>
+            <option value="UNKNOWN">Unknown</option>
           </select>
         </label>
         <button
