@@ -499,15 +499,25 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
 app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req, res) => {
   let client;
   try {
-    const { node_id, amplitude, frequency, duration } = req.body;
+    const { node_id, amplitude, frequency, duration, prediction: clientPrediction, confidence: clientConfidence } = req.body;
     const files = req.files;
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: 'No images uploaded' });
-    }
+    // Jika tiada gambar dilampirkan, kita benarkan juga supaya bridge tak gagal (fallback array kosong)
+    const imageFiles = files || [];
 
-    const activeNodeId = node_id ? parseInt(node_id) : 1;
-    const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0;
+    const activeNodeId = node_id ? parseInt(node_id, 10) : 1;
+    const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0.0;
+    
+    // Guna prediction yang dihantar client, atau default ke DURIAN jika tiada
+    const prediction = clientPrediction ? clientPrediction.toUpperCase() : "DURIAN"; 
+    const confidence = clientConfidence !== undefined ? parseFloat(clientConfidence) : 95.0;     
+    
+    let detection_status = "VERIFIED";
+    let verify_required = false;
+
+    if (prediction !== "DURIAN") {
+      detection_status = "REJECTED";
+    }
 
     client = await pool.connect();
     await client.query("BEGIN");
@@ -516,17 +526,11 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     const readingResult = await client.query(
       `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at) 
        VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
-      [activeNodeId, parsedAmplitude, frequency || 50.0, duration || 1.0]
+      [activeNodeId, parsedAmplitude, frequency ? parseFloat(frequency) : 50.0, duration ? parseFloat(duration) : 1.0]
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    // 2. Logik AI (Sementara hardcode untuk test)
-    const prediction = "DURIAN"; 
-    const confidence = 95.0;     
-    let detection_status = "VERIFIED";
-    let verify_required = false;
-
-    // 3. SIMPAN REKOD DETECTION DULU SUPAYA DAPAT detection_id
+    // 2. SIMPAN REKOD DETECTION DULU SUPAYA DAPAT detection_id
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
        VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
@@ -534,16 +538,15 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 4. UPLOAD GAMBAR KE SUPABASE STORAGE & INSERT KE DUA-DUA TEMPAT
+    // 3. UPLOAD GAMBAR KE SUPABASE STORAGE (Jika ada)
     const BUCKET_NAME = 'durian-captures';
     let image_urls = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i];
       const timeStamp = Date.now();
       const fileName = `detection_${detection_id}_${i + 1}_${timeStamp}.jpg`;
 
-      // Upload ke Supabase Storage
       const { data: uploadData, error: storageError } = await supabaseAdmin.storage
         .from(BUCKET_NAME)
         .upload(fileName, file.buffer, { contentType: file.mimetype });
@@ -556,25 +559,26 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
         const publicUrl = publicUrlData.publicUrl;
         image_urls.push(publicUrl);
 
-        // A. Masukkan ke table detection_image
+        // Masukkan ke table detection_image
         await client.query(
           `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) 
            VALUES ($1, $2, $3, $4)`,
           [detection_id, publicUrl, i + 1, i === 0]
         );
-
       } else {
         console.error("Gagal upload gambar:", storageError.message);
       }
     }
 
-    // B. Update semula column image_urls pada table detection
-    await client.query(
-      `UPDATE detection SET image_urls = $1 WHERE detection_id = $2`,
-      [image_urls, detection_id]
-    );
+    // Update column image_urls pada table detection
+    if (image_urls.length > 0) {
+      await client.query(
+        `UPDATE detection SET image_urls = $1 WHERE detection_id = $2`,
+        [image_urls, detection_id]
+      );
+    }
 
-    // 5. TRIGGER NOTIFICATION (Sentiasa aktif untuk semua event masuk)
+    // 4. TRIGGER NOTIFICATION & PUSH QUEUE (Sentiasa aktif untuk semua event masuk)
     let notificationCreated = false;
     
     let farmerQuery = await client.query(
@@ -586,6 +590,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     if (farmerQuery.rows.length > 0) {
       targetFarmerId = farmerQuery.rows[0].farmer_id;
     } else {
+      // Fallback: Ambil farmer pertama jika node belum dipetakan
       const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
       if (fallbackFarmer.rows.length > 0) {
         targetFarmerId = fallbackFarmer.rows[0].farmer_id;
@@ -593,12 +598,12 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     }
 
     if (targetFarmerId) {
-      const notiTitle = detection_status === "VERIFIED" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
-      const notiMessage = detection_status === "VERIFIED" 
+      const notiTitle = prediction === "DURIAN" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
+      const notiMessage = prediction === "DURIAN" 
         ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.` 
         : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
 
-      // Masukkan ke table notification dan ambil ID
+      // Masukkan ke table notification
       const notifResult = await client.query(
         `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
          VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
@@ -606,7 +611,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       );
       const newNotificationId = notifResult.rows[0].notification_id;
       
-      // Masukkan ke queue supaya worker hantar push notification
+      // Masukkan ke push queue supaya notifikasi tolak (push) dihantar
       await enqueueNotification(client, newNotificationId, targetFarmerId);
       
       notificationCreated = true;
@@ -627,7 +632,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
   } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("Bridge Error:", err);
-    res.status(500).json({ error: "Failed to process event" });
+    res.status(500).json({ error: "Failed to process event", details: err.message });
   } finally {
     client?.release();
   }
