@@ -574,56 +574,43 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       [image_urls, detection_id]
     );
 
-    // 5. TRIGGER NOTIFICATION
+    // 5. TRIGGER NOTIFICATION (Sentiasa aktif untuk semua event masuk)
     let notificationCreated = false;
-    if (detection_status === "VERIFIED") {
-      // Cuba cari farmer mengikut node
-      let farmerQuery = await client.query(
-        `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
-        [activeNodeId]
-      );
+    
+    // Cuba cari farmer mengikut node
+    let farmerQuery = await client.query(
+      `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
+      [activeNodeId]
+    );
 
-      let targetFarmerId = null;
-      if (farmerQuery.rows.length > 0) {
-        targetFarmerId = farmerQuery.rows[0].farmer_id;
-      } else {
-        // Fallback: Ambil farmer pertama yang wujud dalam table farmer supaya noti tidak terlepas
-        const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
-        if (fallbackFarmer.rows.length > 0) {
-          targetFarmerId = fallbackFarmer.rows[0].farmer_id;
-        }
-      }
-
-      if (targetFarmerId) {
-        await client.query(
-          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
-           VALUES ($1, $2, $3, $4, $5)`,
-          [detection_id, targetFarmerId, "Durian Detected! 🍈", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
-        );
-        notificationCreated = true;
-        console.log(`  [NOTIFICATION] Created successfully for farmer_id: ${targetFarmerId}`);
-      } else {
-        console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
+    let targetFarmerId = null;
+    if (farmerQuery.rows.length > 0) {
+      targetFarmerId = farmerQuery.rows[0].farmer_id;
+    } else {
+      // Fallback: Ambil farmer pertama yang wujud dalam table farmer supaya noti tidak terlepas
+      const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
+      if (fallbackFarmer.rows.length > 0) {
+        targetFarmerId = fallbackFarmer.rows[0].farmer_id;
       }
     }
 
-    await client.query("COMMIT");
+    if (targetFarmerId) {
+      // Sesuaikan tajuk mengikut status detection
+      const notiTitle = detection_status === "VERIFIED" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
+      const notiMessage = detection_status === "VERIFIED" 
+        ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.` 
+        : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
 
-    res.status(201).json({
-      message: "Event processed successfully",
-      detection_id: detection_id,
-      notification_triggered: notificationCreated,
-      images_uploaded: image_urls.length
-    });
-
-  } catch (err) {
-    if (client) await client.query("ROLLBACK").catch(() => {});
-    console.error("Bridge Error:", err);
-    res.status(500).json({ error: "Failed to process event" });
-  } finally {
-    client?.release();
-  }
-});
+      await client.query(
+        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [detection_id, targetFarmerId, notiTitle, notiMessage, false]
+      );
+      notificationCreated = true;
+      console.log(`  [NOTIFICATION] Created successfully for farmer_id: ${targetFarmerId}`);
+    } else {
+      console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
+    }
 
 // ============================================================
 // TEST PUSH NOTIFICATION ENDPOINT
