@@ -575,20 +575,36 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     );
 
     // 5. TRIGGER NOTIFICATION
+    // 5. TRIGGER NOTIFICATION
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
-      const farmerQuery = await client.query(
+      // Cuba cari farmer mengikut node
+      let farmerQuery = await client.query(
         `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
         [activeNodeId]
       );
 
+      let targetFarmerId = null;
       if (farmerQuery.rows.length > 0) {
+        targetFarmerId = farmerQuery.rows[0].farmer_id;
+      } else {
+        // Fallback: Ambil farmer pertama yang wujud dalam table farmer supaya noti tidak terlepas
+        const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
+        if (fallbackFarmer.rows.length > 0) {
+          targetFarmerId = fallbackFarmer.rows[0].farmer_id;
+        }
+      }
+
+      if (targetFarmerId) {
         await client.query(
           `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
            VALUES ($1, $2, $3, $4, $5)`,
-          [detection_id, farmerQuery.rows[0].farmer_id, "Durian Detected! 🍈", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
+          [detection_id, targetFarmerId, "Durian Detected! 🍈", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
         );
         notificationCreated = true;
+        console.log(`  [NOTIFICATION] Created successfully for farmer_id: ${targetFarmerId}`);
+      } else {
+        console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
       }
     }
 
