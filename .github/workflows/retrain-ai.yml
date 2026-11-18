@@ -1,7 +1,7 @@
 name: Duri.AI Retraining Pipeline
 
 on:
-  workflow_dispatch: # Ini yang benarkan Render trigger dari jauh
+  workflow_dispatch:
 
 jobs:
   train:
