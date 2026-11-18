@@ -9,6 +9,8 @@ const express = require("express");
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const app = express(); // 2. Wujudkan express app sekali sahaja di sini
+const { createClient } = require("@supabase/supabase-js");
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const cors = require("cors");
 
 // Shared PostgreSQL configuration supports local DB_* and verified Supabase TLS.
@@ -465,7 +467,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0;
 
     client = await pool.connect();
-    await client.query("BEGIN"); // Mula transaction database
+    await client.query("BEGIN");
 
     // 1. Simpan Data Sensor
     const readingResult = await client.query(
@@ -475,25 +477,48 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    // 2. Logik AI (Kau boleh ubah ni ikut kehendak. Contoh kita assume confidence tinggi)
-    // Kalau kau nak biar Raspberry Pi yang buat AI, tukar prediction jadi 'PENDING' dan biar Pi update nanti.
-    const prediction = "DURIAN"; // Sementara ni kita test macam ni
-    const confidence = 95.0;     // Sementara ni kita test macam ni
-
+    // 2. Logik AI (Sementara hardcode untuk test)
+    const prediction = "DURIAN"; 
+    const confidence = 95.0;     
     let detection_status = "VERIFIED";
     let verify_required = false;
 
-    // 3. Simpan Rekod Detection
+    // 3. UPLOAD GAMBAR KE SUPABASE STORAGE
+    const BUCKET_NAME = 'durian-dataset'; // Atau nama bucket kau
+    let image_urls = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const timeStamp = Date.now();
+      // Nama fail unik
+      const fileName = `detection_${reading_id}_${i + 1}_${timeStamp}.jpg`;
+
+      // Upload ke Supabase
+      const { data: uploadData, error: storageError } = await supabaseAdmin.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, file.buffer, { contentType: file.mimetype });
+
+      if (!storageError) {
+        // Dapatkan URL public
+        const { data: publicUrlData } = supabaseAdmin.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(fileName);
+        
+        image_urls.push(publicUrlData.publicUrl);
+      } else {
+        console.error("Gagal upload gambar:", storageError.message);
+      }
+    }
+
+    // 4. Simpan Rekod Detection (Masukkan image_urls yang betul)
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
        VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
-      [reading_id, prediction, confidence, verify_required, detection_status, []]
+      [reading_id, prediction, confidence, verify_required, detection_status, image_urls] // <--- image_urls masuk sini
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // (Simpan gambar ke storage macam kawan kau buat - abaikan buat masa ni kalau tak perlu)
-    
-    // 4. TRIGGER NOTIFICATION (Ini yang buat pop-up muncul!)
+    // 5. TRIGGER NOTIFICATION
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
       const farmerQuery = await client.query(
@@ -502,19 +527,10 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       );
 
       if (farmerQuery.rows.length > 0) {
-        const farmerId = farmerQuery.rows[0].farmer_id;
-        
-        // Masukkan ke table notification
         await client.query(
           `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
            VALUES ($1, $2, $3, $4, $5)`,
-          [
-            detection_id,
-            farmerId,
-            "Durian Detected! 🍈",
-            `Durian jatuh dikesan dengan ${confidence}% keyakinan.`,
-            false
-          ]
+          [detection_id, farmerQuery.rows[0].farmer_id, "Durian Detected! 🍈", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
         );
         notificationCreated = true;
       }
@@ -524,9 +540,9 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
 
     res.status(201).json({
       message: "Event processed successfully",
-      reading_id: reading_id,
       detection_id: detection_id,
-      notification_triggered: notificationCreated
+      notification_triggered: notificationCreated,
+      images_uploaded: image_urls.length
     });
 
   } catch (err) {
