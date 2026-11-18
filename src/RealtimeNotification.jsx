@@ -29,9 +29,7 @@ export default function RealtimeNotification() {
           setIncomingAlert(payload.new);
           setIsOpen(true);
 
-          if ('vibrate' in navigator) {
-            navigator.vibrate([300, 100, 300]);
-          }
+          
         }
       )
       .subscribe();
@@ -70,7 +68,7 @@ const styles = {
     top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     display: 'flex', justifyContent: 'center', alignItems: 'center',
-    zIndex: 9999,
+    zIndex: 99999, // <--- TUKAR JADI 99999 (Bagi paling tinggi)
   },
   card: {
     backgroundColor: '#161622', 
