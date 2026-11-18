@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://hlbnjwcosgxpigecivxd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_wRG4earrz1VsFBNEL1dmUw_Cc_5ACEJ';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhsYm5qd2Nvc2d4cGlnZWNpdnhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDA2OTEsImV4cCI6MjEwODU3NjY5MX0.PxpITbf-xbUo4qeov9KOa-imtWqMCNwod9UIQsQzGkk';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
