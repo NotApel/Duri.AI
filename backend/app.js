@@ -6,6 +6,8 @@ const dotenv = require("dotenv");
 dotenv.config(); // 1. Panggil dotenv paling atas sekali
 
 const express = require("express");
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 const app = express(); // 2. Wujudkan express app sekali sahaja di sini
 const cors = require("cors");
 
@@ -445,6 +447,97 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     client?.release();
   }
 });
+
+// ============================================================
+// ENDPOINT UNTUK IOT BRIDGE (Terima Gambar + Trigger Notif)
+// ============================================================
+app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req, res) => {
+  let client;
+  try {
+    const { node_id, amplitude, frequency, duration } = req.body;
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: 'No images uploaded' });
+    }
+
+    const activeNodeId = node_id ? parseInt(node_id) : 1;
+    const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0;
+
+    client = await pool.connect();
+    await client.query("BEGIN"); // Mula transaction database
+
+    // 1. Simpan Data Sensor
+    const readingResult = await client.query(
+      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at) 
+       VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+      [activeNodeId, parsedAmplitude, frequency || 50.0, duration || 1.0]
+    );
+    const reading_id = readingResult.rows[0].reading_id;
+
+    // 2. Logik AI (Kau boleh ubah ni ikut kehendak. Contoh kita assume confidence tinggi)
+    // Kalau kau nak biar Raspberry Pi yang buat AI, tukar prediction jadi 'PENDING' dan biar Pi update nanti.
+    const prediction = "DURIAN"; // Sementara ni kita test macam ni
+    const confidence = 95.0;     // Sementara ni kita test macam ni
+
+    let detection_status = "VERIFIED";
+    let verify_required = false;
+
+    // 3. Simpan Rekod Detection
+    const detectionResult = await client.query(
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
+      [reading_id, prediction, confidence, verify_required, detection_status, []]
+    );
+    const detection_id = detectionResult.rows[0].detection_id;
+
+    // (Simpan gambar ke storage macam kawan kau buat - abaikan buat masa ni kalau tak perlu)
+    
+    // 4. TRIGGER NOTIFICATION (Ini yang buat pop-up muncul!)
+    let notificationCreated = false;
+    if (detection_status === "VERIFIED") {
+      const farmerQuery = await client.query(
+        `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
+        [activeNodeId]
+      );
+
+      if (farmerQuery.rows.length > 0) {
+        const farmerId = farmerQuery.rows[0].farmer_id;
+        
+        // Masukkan ke table notification
+        await client.query(
+          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            detection_id,
+            farmerId,
+            "Durian Detected! 🍈",
+            `Durian jatuh dikesan dengan ${confidence}% keyakinan.`,
+            false
+          ]
+        );
+        notificationCreated = true;
+      }
+    }
+
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      message: "Event processed successfully",
+      reading_id: reading_id,
+      detection_id: detection_id,
+      notification_triggered: notificationCreated
+    });
+
+  } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("Bridge Error:", err);
+    res.status(500).json({ error: "Failed to process event" });
+  } finally {
+    client?.release();
+  }
+});
+
 
 // 404 NOT FOUND & ERROR HANDLER
 app.use((req, res) => {
