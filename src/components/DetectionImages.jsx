@@ -1,7 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import { API_URL } from "../services/api";
 import { fetchDetectionImages } from "../services/detectionApi";
-import { normalizeImages } from "../services/detectionImages";
+
+// Di-update terus di sini supaya terus terima URL Supabase tanpa cantum API_URL
+export function normalizeImages(rows, apiUrl) {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.map((row, index) => {
+    let imagePath = row.image_path || row.image_url || "";
+    let imageUrl = "";
+
+    // Semak sama ada imagePath sudah menjadi URL penuh (seperti dari Supabase Storage)
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+      imageUrl = imagePath;
+    } else {
+      // Jika laluan lokal biasa, barulah cantum dengan API_URL
+      const cleanApiUrl = apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl;
+      const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
+      imageUrl = `${cleanApiUrl}${cleanPath}`;
+    }
+
+    return {
+      id: row.image_id || index + 1,
+      sequence: row.sequence_number || index + 1,
+      url: imageUrl,
+      isSelected: row.is_selected ?? (index === 0),
+    };
+  });
+}
+
 export default function DetectionImages({ event }) {
   const [result, setResult] = useState({
     images: [],
@@ -12,6 +39,7 @@ export default function DetectionImages({ event }) {
   const [selected, setSelected] = useState(0);
   const [broken, setBroken] = useState({});
   const dialog = useRef(null);
+
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -38,7 +66,9 @@ export default function DetectionImages({ event }) {
     load();
     return () => controller.abort();
   }, [event.id, event.images, attempt]);
+
   const image = result.images[selected] || result.images[0];
+
   return (
     <section className="d-image-viewer" aria-label="Detection images">
       <h3>Detection images</h3>
