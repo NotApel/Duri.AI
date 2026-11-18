@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://hlbnjwcosgxpigecivxd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_wRG4earrz1VsFBNEL1dmUw_Cc_5ACEJ';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Komponen Utama Paparan Notifikasi Real-Time
