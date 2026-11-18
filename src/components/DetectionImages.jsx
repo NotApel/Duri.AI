@@ -12,8 +12,8 @@ export function normalizeImages(rows, apiUrl) {
 
     // Semak sama ada imagePath sudah menjadi URL penuh (seperti dari Supabase Storage)
     if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
-      imageUrl = imagePath;
-    } else {
+  imageUrl = imagePath; // Guna terus URL Supabase tanpa cantum API_URL
+} else {
       // Jika laluan lokal biasa, barulah cantum dengan API_URL
       const cleanApiUrl = apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl;
       const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
