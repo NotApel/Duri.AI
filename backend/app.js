@@ -575,7 +575,6 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     );
 
     // 5. TRIGGER NOTIFICATION
-    // 5. TRIGGER NOTIFICATION
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
       // Cuba cari farmer mengikut node
