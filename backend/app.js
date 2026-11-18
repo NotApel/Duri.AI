@@ -575,7 +575,6 @@ app.get('/api/detections/:id/images', auth, async (req, res) => {
   try {
     const detectionId = req.params.id;
 
-    // Ambil senarai gambar dari table detection_image menggunakan Supabase Admin
     const { data, error } = await supabaseAdmin
       .from('detection_image')
       .select('image_id, detection_id, image_path, sequence_number, is_selected')
@@ -587,7 +586,16 @@ app.get('/api/detections/:id/images', auth, async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    return res.status(200).json(data);
+    // MAP SUPABASE DATA SUPAYA FRONTEND DAPAT ATRIBUT PATH / URL YANG SAH
+    const formattedImages = data.map(img => ({
+      id: img.image_id,
+      path: img.image_path,
+      url: img.image_path,
+      sequence: img.sequence_number,
+      isSelected: img.is_selected
+    }));
+
+    return res.status(200).json(formattedImages);
   } catch (err) {
     console.error('[CRITICAL ERROR - FETCH IMAGES]:', err);
     return res.status(500).json({ error: 'Internal server error' });
