@@ -12,7 +12,8 @@ const app = express(); // 2. Wujudkan express app sekali sahaja di sini
 const { createClient } = require("@supabase/supabase-js");
 const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const cors = require("cors");
-const enabled = env.PUSH_ENABLED === "true";
+const enabled = process.env.PUSH_ENABLED === "true"; // Betulkan dari env kepada process.env
+
 // Shared PostgreSQL configuration supports local DB_* and verified Supabase TLS.
 const pool = require("./db");
 const { createStorage } = require("./storage");
@@ -459,16 +460,16 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
         [node_id],
       );
       if (farmerQuery.rows.length > 0) {
-        await client.query(
-          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) VALUES ($1, $2, $3, $4, $5)`,
-          [
-            detection_id,
-            farmerQuery.rows[0].farmer_id,
-            "Durian Detected!",
-            `Durian jatuh dikesan dengan ${confidence}% keyakinan.`,
-            false,
-          ],
+        // 1. Masukkan ke table notification dan ambil ID dia
+        const notifResult = await client.query(
+          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
+           VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
+          [detection_id, farmerQuery.rows[0].farmer_id, "Durian Detected!", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
         );
+        const newNotificationId = notifResult.rows[0].notification_id;
+
+        // 2. Queue push notification
+        await enqueueNotification(client, newNotificationId, farmerQuery.rows[0].farmer_id);
         notificationCreated = true;
       }
     }
@@ -483,8 +484,9 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
         notification_triggered: notificationCreated,
       },
     });
-  } catch {
+  } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("Fusion Error:", err);
     res.status(500).json({ error: "Failed to process sensor fusion" });
   } finally {
     client?.release();
@@ -525,7 +527,6 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     let verify_required = false;
 
     // 3. SIMPAN REKOD DETECTION DULU SUPAYA DAPAT detection_id
-    // (Kita kosongkan image_urls dulu, nanti kita update lepas upload gambar)
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
        VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
@@ -534,7 +535,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     const detection_id = detectionResult.rows[0].detection_id;
 
     // 4. UPLOAD GAMBAR KE SUPABASE STORAGE & INSERT KE DUA-DUA TEMPAT
-    const BUCKET_NAME = 'durian-captures'; // Pastikan nama bucket betul
+    const BUCKET_NAME = 'durian-captures';
     let image_urls = [];
 
     for (let i = 0; i < files.length; i++) {
@@ -548,7 +549,6 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
         .upload(fileName, file.buffer, { contentType: file.mimetype });
 
       if (!storageError) {
-        // Dapatkan URL public Supabase
         const { data: publicUrlData } = supabaseAdmin.storage
           .from(BUCKET_NAME)
           .getPublicUrl(fileName);
@@ -556,20 +556,19 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
         const publicUrl = publicUrlData.publicUrl;
         image_urls.push(publicUrl);
 
-        // A. Masukkan ke table detection_image (Supaya fetchDetectionImages() frontend boleh baca)
-              await client.query(
-        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
-         VALUES ($1, $2, $3, $4, $5)`,
-        [detection_id, targetFarmerId, notiTitle, notiMessage, false]
-      );
-      notificationCreated = true;
+        // A. Masukkan ke table detection_image
+        await client.query(
+          `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) 
+           VALUES ($1, $2, $3, $4)`,
+          [detection_id, publicUrl, i + 1, i === 0]
+        );
 
       } else {
         console.error("Gagal upload gambar:", storageError.message);
       }
     }
 
-    // B. Update semula column image_urls pada table detection dengan senarai URL penuh
+    // B. Update semula column image_urls pada table detection
     await client.query(
       `UPDATE detection SET image_urls = $1 WHERE detection_id = $2`,
       [image_urls, detection_id]
@@ -578,7 +577,6 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     // 5. TRIGGER NOTIFICATION (Sentiasa aktif untuk semua event masuk)
     let notificationCreated = false;
     
-    // Cuba cari farmer mengikut node
     let farmerQuery = await client.query(
       `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
       [activeNodeId]
@@ -588,7 +586,6 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     if (farmerQuery.rows.length > 0) {
       targetFarmerId = farmerQuery.rows[0].farmer_id;
     } else {
-      // Fallback: Ambil farmer pertama yang wujud dalam table farmer supaya noti tidak terlepas
       const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
       if (fallbackFarmer.rows.length > 0) {
         targetFarmerId = fallbackFarmer.rows[0].farmer_id;
@@ -596,13 +593,12 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     }
 
     if (targetFarmerId) {
-      // Sesuaikan tajuk mengikut status detection
       const notiTitle = detection_status === "VERIFIED" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
       const notiMessage = detection_status === "VERIFIED" 
         ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.` 
         : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
 
-            // 1. Masukkan ke table notification dan ambil ID dia
+      // Masukkan ke table notification dan ambil ID
       const notifResult = await client.query(
         `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
          VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
@@ -610,13 +606,11 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       );
       const newNotificationId = notifResult.rows[0].notification_id;
       
-      // 2. MASUKKAN KE QUEUE (Ini yang trigger worker hantar ke phone)
+      // Masukkan ke queue supaya worker hantar push notification
       await enqueueNotification(client, newNotificationId, targetFarmerId);
       
       notificationCreated = true;
-      console.log(`  [NOTIFICATION] Created and queued for push successfully!`);
-
-      console.log(`  [NOTIFICATION] Created successfully for farmer_id: ${targetFarmerId}`);
+      console.log(`  [NOTIFICATION] Created and queued successfully for farmer_id: ${targetFarmerId}`);
     } else {
       console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
     }
@@ -637,15 +631,13 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
   } finally {
     client?.release();
   }
-}); // <-- KURUNGAN PENUTUP UNTUK app.post('/api/upload-event') YANG TERTINGGAL SEBELUM NI
+});
 
 // ============================================================
 // TEST PUSH NOTIFICATION ENDPOINT
-// (Dipindahkan sebelum handler 404 supaya boleh dicapai)
 // ============================================================
 app.post("/api/test-push", auth, async (req, res) => {
   try {
-    // 1. Cari langganan push untuk farmer yang sedang login
     const subResult = await pool.query(
       "SELECT * FROM push_subscription WHERE farmer_id = $1 LIMIT 1",
       [req.farmer.id]
@@ -657,7 +649,6 @@ app.post("/api/test-push", auth, async (req, res) => {
 
     const sub = subResult.rows[0];
 
-    // 2. Hantar test push notification menggunakan web-push
     const webPush = require("web-push");
     const pushPayload = JSON.stringify({
       title: "Ujian Duri.AI! 🍈",
