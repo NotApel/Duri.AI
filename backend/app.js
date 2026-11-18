@@ -570,7 +570,6 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
 });
 
 // Tambah endpoint ini di dalam app.js utama supaya frontend boleh tarik senarai gambar
-// Endpoint untuk Frontend tarik senarai gambar detection dari table detection_image
 app.get('/api/detections/:id/images', auth, async (req, res) => {
   try {
     const detectionId = req.params.id;
@@ -586,8 +585,7 @@ app.get('/api/detections/:id/images', auth, async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    // MAP SUPABASE DATA SUPAYA FRONTEND DAPAT ATRIBUT PATH / URL YANG SAH
-    const formattedImages = data.map(img => ({
+    const formattedImages = (data || []).map(img => ({
       id: img.image_id,
       path: img.image_path,
       url: img.image_path,
@@ -598,7 +596,7 @@ app.get('/api/detections/:id/images', auth, async (req, res) => {
     return res.status(200).json(formattedImages);
   } catch (err) {
     console.error('[CRITICAL ERROR - FETCH IMAGES]:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: "Failed to fetch detection images" });
   }
 });
 
