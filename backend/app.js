@@ -333,9 +333,13 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
       message: "Fusion processed",
       fusion_result: { detection_id, vibration_amplitude: amplitude, ai_prediction: prediction, final_status: detection_status, notification_triggered: notificationCreated },
     });
-  } catch {
+      } catch (err) { 
     if (client) await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: "Failed to process sensor fusion" });
+    console.error("Fusion Error:", err); // <--- Print error kat Render Logs
+    res.status(500).json({ 
+      error: "Failed to process sensor fusion", 
+      details: err.message // <--- Hantar error sebenar ke Thunder Client
+    });
   } finally {
     client?.release();
   }
