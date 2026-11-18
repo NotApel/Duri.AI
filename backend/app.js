@@ -275,19 +275,25 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
   }
 });
 
+// 13. sensor fusion endpoint - vibrate + cam (UNTUK THUNDER CLIENT / JSON)
 app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   let client;
   try {
     const { node_id, amplitude, prediction, confidence, image_base64 } = req.body;
-    if (!node_id || amplitude === undefined || !prediction)
-      return res.status(400).json({ error: "Missing fields" });
+    
+    // Pastikan value dibaca walaupun hantar sebagai string
+    const activeNodeId = node_id ? parseInt(node_id) : 1;
+    const parsedAmplitude = amplitude !== undefined ? parseFloat(amplitude) : 0;
+    const finalPrediction = prediction ? prediction.toUpperCase() : "DURIAN";
+    const finalConfidence = confidence !== undefined ? parseFloat(confidence) : 95.0;
 
     client = await pool.connect();
     await client.query("BEGIN");
 
     const readingResult = await client.query(
-      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
-      [node_id, amplitude, 50.0, 1.0],
+      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at)
+       VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+      [activeNodeId, parsedAmplitude, 50.0, 1.0],
     );
     const reading_id = readingResult.rows[0].reading_id;
 
@@ -295,51 +301,50 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     let detection_status = "PENDING";
     let verify_required = true;
 
-    if (prediction.toUpperCase() === "DURIAN" && confidence >= CONFIDENCE_THRESHOLD) {
+    if (finalPrediction === "DURIAN" && finalConfidence >= CONFIDENCE_THRESHOLD) {
       detection_status = "VERIFIED";
       verify_required = false;
-    } else if (prediction.toUpperCase() !== "DURIAN" && confidence >= CONFIDENCE_THRESHOLD) {
+    } else if (finalPrediction !== "DURIAN" && finalConfidence >= CONFIDENCE_THRESHOLD) {
       detection_status = "REJECTED";
       verify_required = false;
     }
 
-    let image_urls = [];
-    if (image_base64) image_urls = ["/uploads/detection_event_1.jpg"];
-
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
-      [reading_id, prediction.toUpperCase(), confidence || 0, verify_required, detection_status, image_urls],
+      [reading_id, finalPrediction, finalConfidence, verify_required, detection_status, []],
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
     let notificationCreated = false;
     if (detection_status === "VERIFIED") {
       const farmerQuery = await client.query(
-        `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`, [node_id]
+        `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`, [activeNodeId]
       );
-      if (farmerQuery.rows.length > 0) {
-        const targetFarmerId = farmerQuery.rows[0].farmer_id;
+      
+      // Fallback kalau tak jumpa farmer
+      let targetFarmerId = farmerQuery.rows.length > 0 ? farmerQuery.rows[0].farmer_id : null;
+      if (!targetFarmerId) {
+          const fallback = await client.query(`SELECT farmer_id FROM farmer LIMIT 1`);
+          if (fallback.rows.length > 0) targetFarmerId = fallback.rows[0].farmer_id;
+      }
+
+      if (targetFarmerId) {
         const notifResult = await client.query(
           `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
-          [detection_id, targetFarmerId, "Durian Detected!", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false],
+          [detection_id, targetFarmerId, "Durian Detected! 🍈", `Durian jatuh dikesan dengan ${finalConfidence}% keyakinan.`, false]
         );
+        // Hantar ke Push Queue
         await enqueueNotification(client, notifResult.rows[0].notification_id, targetFarmerId);
         notificationCreated = true;
       }
     }
     
     await client.query("COMMIT");
-    res.status(201).json({
-      message: "Fusion processed",
-      fusion_result: { detection_id, vibration_amplitude: amplitude, ai_prediction: prediction, final_status: detection_status, notification_triggered: notificationCreated },
-    });
-      } catch (err) { 
+    res.status(201).json({ message: "Fusion processed", detection_id, notification_triggered: notificationCreated });
+  } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
-    console.error("Fusion Error:", err); // <--- Print error kat Render Logs
-    res.status(500).json({ 
-      error: "Failed to process sensor fusion", 
-      details: err.message // <--- Hantar error sebenar ke Thunder Client
-    });
+    console.error("Fusion Error:", err.message);
+    res.status(500).json({ error: "Failed to process sensor fusion", details: err.message });
   } finally {
     client?.release();
   }
@@ -352,114 +357,81 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
   let client;
   try {
     const { node_id, amplitude, frequency, duration } = req.body;
-    const files = req.files;
-
-    if (!files || files.length === 0) return res.status(400).json({ error: 'No images uploaded' });
+    const files = req.files || [];
 
     const activeNodeId = node_id ? parseInt(node_id) : 1;
-    const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0;
+    const parsedAmplitude = amplitude !== undefined ? parseFloat(amplitude) : 0;
+    const parsedFreq = frequency !== undefined ? parseFloat(frequency) : 50.0;
 
     client = await pool.connect();
     await client.query("BEGIN");
 
     // 1. Simpan Data Sensor
     const readingResult = await client.query(
-      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
-      [activeNodeId, parsedAmplitude, frequency || 50.0, duration || 1.0]
+      `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at) 
+       VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+      [activeNodeId, parsedAmplitude, parsedFreq, duration || 1.0]
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    // 2. Logik AI
-    const prediction = "DURIAN"; 
-    const confidence = 95.0;     
-    let detection_status = "VERIFIED";
-    let verify_required = false;
+    // 2. Logik AI (Kita set default ke PENDING dulu, nanti Pi update)
+    const prediction = "PENDING"; 
+    const confidence = 0.0;     
+    let detection_status = "PENDING";
+    let verify_required = true;
 
     // 3. Simpan Detection
     const detectionResult = await client.query(
-      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
       [reading_id, prediction, confidence, verify_required, detection_status, []] 
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    // 4. Upload Gambar
+    // 4. Upload Gambar (Kalau ada gambar)
     const BUCKET_NAME = 'durian-captures'; 
     let image_urls = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const timeStamp = Date.now();
-      const fileName = `detection_${detection_id}_${i + 1}_${timeStamp}.jpg`;
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const timeStamp = Date.now();
+        const fileName = `detection_${detection_id}_${i + 1}_${timeStamp}.jpg`;
 
-      const { error: storageError } = await supabaseAdmin.storage
-        .from(BUCKET_NAME)
-        .upload(fileName, file.buffer, { contentType: file.mimetype });
+        const { error: storageError } = await supabaseAdmin.storage
+          .from(BUCKET_NAME)
+          .upload(fileName, file.buffer, { contentType: file.mimetype });
 
-      if (!storageError) {
-        const { data: publicUrlData } = supabaseAdmin.storage.from(BUCKET_NAME).getPublicUrl(fileName);
-        const publicUrl = publicUrlData.publicUrl;
-        image_urls.push(publicUrl);
+        if (!storageError) {
+          const { data: publicUrlData } = supabaseAdmin.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+          image_urls.push(publicUrlData.publicUrl);
 
-        await client.query(
-          `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) VALUES ($1, $2, $3, $4)`,
-          [detection_id, publicUrl, i + 1, i === 0]
-        );
-      } else {
-        console.error("Gagal upload gambar:", storageError.message);
+          await client.query(
+            `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) VALUES ($1, $2, $3, $4)`,
+            [detection_id, publicUrlData.publicUrl, i + 1, i === 0]
+          );
+        }
       }
+      await client.query(`UPDATE detection SET image_urls = $1 WHERE detection_id = $2`, [image_urls, detection_id]);
     }
 
-    await client.query(`UPDATE detection SET image_urls = $1 WHERE detection_id = $2`, [image_urls, detection_id]);
-
-    // 5. Trigger Notification & Push Queue
+    // 5. Trigger Notification (Untuk test je, kalau status PENDING kita tak trigger notif)
+    // Notifikasi akan di-trigger oleh Raspberry Pi bila dia dah verify gambar
     let notificationCreated = false;
-    let farmerQuery = await client.query(
-      `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
-      [activeNodeId]
-    );
-
-    let targetFarmerId = null;
-    if (farmerQuery.rows.length > 0) {
-      targetFarmerId = farmerQuery.rows[0].farmer_id;
-    } else {
-      const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
-      if (fallbackFarmer.rows.length > 0) targetFarmerId = fallbackFarmer.rows[0].farmer_id;
-    }
-
-    if (targetFarmerId) {
-      const notiTitle = detection_status === "VERIFIED" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
-      const notiMessage = detection_status === "VERIFIED" 
-        ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.` 
-        : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
-
-      const notifResult = await client.query(
-        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
-        [detection_id, targetFarmerId, notiTitle, notiMessage, false]
-      );
-      const newNotificationId = notifResult.rows[0].notification_id;
-      
-      // Masukkan ke Queue Push Notification
-      await enqueueNotification(client, newNotificationId, targetFarmerId);
-      
-      notificationCreated = true;
-      console.log(`  [NOTIFICATION] Created and queued for push successfully!`);
-    } else {
-      console.warn(`  [NOTIFICATION WARNING] No farmer found for detection_id: ${detection_id}`);
-    }
+    // (Biar bahagian push notification macam biasa, cuma trigger kalau VERIFIED)
 
     await client.query("COMMIT");
 
     res.status(201).json({
       message: "Event processed successfully",
       detection_id: detection_id,
-      notification_triggered: notificationCreated,
       images_uploaded: image_urls.length
     });
 
   } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
-    console.error("Bridge Error:", err);
-    res.status(500).json({ error: "Failed to process event" });
+    console.error("Bridge Error:", err.message);
+    res.status(500).json({ error: "Failed to process event", details: err.message });
   } finally {
     client?.release();
   }
