@@ -10,7 +10,7 @@ function createTrainingRoutes(pool, authenticate) {
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
-  // 1. ENDPOINT ASAL KAU (Untuk tarik data history training)
+  // 1. ENDPOINT HISTORY TRAINING
   router.get(
     "/analytics/training",
     authenticate,
@@ -25,27 +25,34 @@ function createTrainingRoutes(pool, authenticate) {
       );
       
       let cloudStatus = "idle";
+      let currentAccuracy = null;
+      let lastRetrained = null;
+
       if (supabase) {
-        const { data } = await supabase.from('ai_status').select('status').eq('id', 1).single();
-        if (data) cloudStatus = data.status;
+        const { data } = await supabase.from('ai_status').select('*').eq('id', 1).single();
+        if (data) {
+          cloudStatus = data.status;
+          currentAccuracy = data.accuracy;
+          lastRetrained = data.last_retrained;
+        }
       }
 
       res.json({
         totalCorrections: corrections.rows[0].count,
         pendingTraining: pending.rows[0].count,
         evaluations: [],
-        currentAccuracy: null,
-        accuracyHistory: [],
-        lastRetrained: null,
+        currentAccuracy: currentAccuracy ? `${currentAccuracy.toFixed(2)}%` : 'Unavailable',
+        accuracyHistory: [], 
+        lastRetrained: lastRetrained ? new Date(lastRetrained).toLocaleDateString() : 'Not yet retrained',
         retraining_available: true,
         worker: { status: cloudStatus }, 
         weekly_schedule: null,
         evaluation_note: "Training is securely handled via Google Colab & Supabase Storage.",
       });
-    }),
+    })
   );
 
-  // 2. ENDPOINT POLLING (Untuk update progress bar di frontend)
+  // 2. ENDPOINT POLLING (Progress Bar)
   router.get(
     "/analytics/retrain-status",
     authenticate,
@@ -56,7 +63,7 @@ function createTrainingRoutes(pool, authenticate) {
     })
   );
 
-  // 3. ENDPOINT BUTANG RETRAIN (Untuk trigger Google Colab)
+  // 3. ENDPOINT BUTANG RETRAIN
   const manualLimit = rateLimit({
     windowMs: 24 * 60 * 60 * 1000,
     limit: 10,
