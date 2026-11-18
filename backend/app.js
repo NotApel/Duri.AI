@@ -569,6 +569,29 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
   }
 });
 
+// Tambah endpoint ini di dalam app.js utama supaya frontend boleh tarik senarai gambar
+app.get('/api/detections/:id/images', auth, async (req, res) => {
+  try {
+    const detectionId = req.params.id;
+
+    // Ambil senarai gambar dari table detection_image menggunakan Supabase Admin / Client
+    const { data, error } = await supabaseAdmin
+      .from('detection_image')
+      .select('image_id, detection_id, image_path, sequence_number, is_selected')
+      .eq('detection_id', detectionId)
+      .order('sequence_number', { ascending: true });
+
+    if (error) {
+      console.error('[ERROR - FETCH IMAGES]', error.message);
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error('[CRITICAL ERROR - FETCH IMAGES]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // 404 NOT FOUND & ERROR HANDLER
 app.use((req, res) => {
