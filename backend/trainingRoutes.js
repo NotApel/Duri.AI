@@ -41,7 +41,7 @@ function createTrainingRoutes(pool, authenticate) {
         totalCorrections: corrections.rows[0].count,
         pendingTraining: pending.rows[0].count,
         evaluations: [],
-        currentAccuracy: currentAccuracy ? `${currentAccuracy.toFixed(2)}%` : 'Unavailable',
+        currentAccuracy: (currentAccuracy !== null && currentAccuracy !== undefined) ? `${Number(currentAccuracy).toFixed(2)}%` : 'Unavailable',
         accuracyHistory: [], 
         lastRetrained: lastRetrained ? new Date(lastRetrained).toLocaleDateString() : 'Not yet retrained',
         retraining_available: true,
