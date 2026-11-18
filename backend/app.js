@@ -483,40 +483,55 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     let detection_status = "VERIFIED";
     let verify_required = false;
 
-    // 3. UPLOAD GAMBAR KE SUPABASE STORAGE
-    const BUCKET_NAME = 'durian-dataset'; // Atau nama bucket kau
+    // 3. SIMPAN REKOD DETECTION DULU SUPAYA DAPAT detection_id
+    // (Kita kosongkan image_urls dulu, nanti kita update lepas upload gambar)
+    const detectionResult = await client.query(
+      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
+      [reading_id, prediction, confidence, verify_required, detection_status, []] 
+    );
+    const detection_id = detectionResult.rows[0].detection_id;
+
+    // 4. UPLOAD GAMBAR KE SUPABASE STORAGE & INSERT KE DUA-DUA TEMPAT
+    const BUCKET_NAME = 'durian-captures'; // Pastikan nama bucket betul
     let image_urls = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const timeStamp = Date.now();
-      // Nama fail unik
-      const fileName = `detection_${reading_id}_${i + 1}_${timeStamp}.jpg`;
+      const fileName = `detection_${detection_id}_${i + 1}_${timeStamp}.jpg`;
 
-      // Upload ke Supabase
+      // Upload ke Supabase Storage
       const { data: uploadData, error: storageError } = await supabaseAdmin.storage
         .from(BUCKET_NAME)
         .upload(fileName, file.buffer, { contentType: file.mimetype });
 
       if (!storageError) {
-        // Dapatkan URL public
+        // Dapatkan URL public Supabase
         const { data: publicUrlData } = supabaseAdmin.storage
           .from(BUCKET_NAME)
           .getPublicUrl(fileName);
         
-        image_urls.push(publicUrlData.publicUrl);
+        const publicUrl = publicUrlData.publicUrl;
+        image_urls.push(publicUrl);
+
+        // A. Masukkan ke table detection_image (Supaya fetchDetectionImages() frontend boleh baca)
+        await client.query(
+          `INSERT INTO detection_image (detection_id, image_path, sequence_number, is_selected) 
+           VALUES ($1, $2, $3, $4)`,
+          [detection_id, publicUrl, i + 1, i === 0]
+        );
+
       } else {
         console.error("Gagal upload gambar:", storageError.message);
       }
     }
 
-    // 4. Simpan Rekod Detection (Masukkan image_urls yang betul)
-    const detectionResult = await client.query(
-      `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) 
-       VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
-      [reading_id, prediction, confidence, verify_required, detection_status, image_urls] // <--- image_urls masuk sini
+    // B. Update semula column image_urls pada table detection dengan senarai URL penuh
+    await client.query(
+      `UPDATE detection SET image_urls = $1 WHERE detection_id = $2`,
+      [image_urls, detection_id]
     );
-    const detection_id = detectionResult.rows[0].detection_id;
 
     // 5. TRIGGER NOTIFICATION
     let notificationCreated = false;
