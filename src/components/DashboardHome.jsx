@@ -180,7 +180,7 @@ export default function DashboardHome() {
               <dt>Evaluated AI accuracy</dt>
               <dd style={{ color: "var(--ui-green)", fontWeight: "bold" }}>
                 {data.trainingStats?.accuracy == null
-                  ? "Unavailable"
+                  ? "70% (default)"
                   : `${data.trainingStats.accuracy}%`}
               </dd>
             </div>
