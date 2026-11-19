@@ -453,25 +453,26 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     );
     const detection_id = detectionResult.rows[0].detection_id;
 
-    let notificationCreated = false;
-    if (detection_status === "VERIFIED") {
-      const farmerQuery = await client.query(
-        `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
-        [node_id],
+        let notificationCreated = false;
+    const farmerQuery = await client.query(
+      `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
+      [node_id],
+    );
+    if (farmerQuery.rows.length > 0) {
+      const farmerId = farmerQuery.rows[0].farmer_id;
+      const title = detection_status === "VERIFIED" ? "Durian Detected!" : "New detection received";
+      const message = detection_status === "VERIFIED"
+        ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.`
+        : `New event received (${detection_status}). Open it to review and give feedback.`;
+      const notifResult = await client.query(
+        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (detection_id) DO UPDATE SET title = EXCLUDED.title, message_noti = EXCLUDED.message_noti
+         RETURNING notification_id`,
+        [detection_id, farmerId, title, message, false],
       );
-      if (farmerQuery.rows.length > 0) {
-        // 1. Masukkan ke table notification dan ambil ID dia
-        const notifResult = await client.query(
-          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
-           VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
-          [detection_id, farmerQuery.rows[0].farmer_id, "Durian Detected!", `Durian jatuh dikesan dengan ${confidence}% keyakinan.`, false]
-        );
-        const newNotificationId = notifResult.rows[0].notification_id;
-
-        // 2. Queue push notification
-        await enqueueNotification(client, newNotificationId, farmerQuery.rows[0].farmer_id);
-        notificationCreated = true;
-      }
+      await enqueueNotification(client, notifResult.rows[0].notification_id, farmerId);
+      notificationCreated = true;
     }
     await client.query("COMMIT");
     res.status(201).json({
@@ -612,11 +613,13 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
         const notiMessage = prediction === "DURIAN"
           ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.`
           : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
-        const notifResult = await client.query(
-          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
-           VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
-          [detection_id, targetFarmerId, notiTitle, notiMessage, false]
-        );
+              const notifResult = await client.query(
+        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (detection_id) DO UPDATE SET title = EXCLUDED.title, message_noti = EXCLUDED.message_noti
+         RETURNING notification_id`,
+        [detection_id, targetFarmerId, notiTitle, notiMessage, false]
+      );
         notificationId = notifResult.rows[0].notification_id;
       }
     }

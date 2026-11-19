@@ -158,7 +158,7 @@ function createProcessedEventRoutes(pool, storage) {
           );
         const notification = (
           await client.query(
-            "INSERT INTO notification(detection_id,farmer_id,title,message_noti) VALUES ($1,$2,$3,$4) RETURNING notification_id",
+            "INSERT INTO notification(detection_id,farmer_id,title,message_noti) VALUES ($1,$2,$3,$4) ON CONFLICT (detection_id) DO UPDATE SET title=EXCLUDED.title, message_noti=EXCLUDED.message_noti RETURNING notification_id",
             [
               detection.detection_id,
               device.farmer_id,
