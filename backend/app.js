@@ -578,46 +578,54 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       );
     }
 
-    // 4. TRIGGER NOTIFICATION & PUSH QUEUE (Sentiasa aktif untuk semua event masuk)
+       // 4. NOTIFICATION + PUSH QUEUE
+    // Trigger DB dah cipta notification untuk status selain VERIFIED,
+    // jadi guna yang sedia ada. Kalau tiada, baru insert sendiri.
     let notificationCreated = false;
-    
-    let farmerQuery = await client.query(
-      `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
-      [activeNodeId]
+    let notificationId = null;
+    let targetFarmerId = null;
+
+    const existingNoti = await client.query(
+      `SELECT notification_id, farmer_id FROM notification WHERE detection_id = $1 LIMIT 1`,
+      [detection_id]
     );
 
-    let targetFarmerId = null;
-    if (farmerQuery.rows.length > 0) {
-      targetFarmerId = farmerQuery.rows[0].farmer_id;
+    if (existingNoti.rows.length) {
+      notificationId = existingNoti.rows[0].notification_id;
+      targetFarmerId = existingNoti.rows[0].farmer_id;
     } else {
-      // Fallback: Ambil farmer pertama jika node belum dipetakan
-      const fallbackFarmer = await client.query(`SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`);
-      if (fallbackFarmer.rows.length > 0) {
-        targetFarmerId = fallbackFarmer.rows[0].farmer_id;
+      const farmerQuery = await client.query(
+        `SELECT fp.farmer_id FROM farm_plot fp JOIN sensor_node sn ON sn.plot_id = fp.plot_id WHERE sn.node_id = $1`,
+        [activeNodeId]
+      );
+      if (farmerQuery.rows.length > 0) {
+        targetFarmerId = farmerQuery.rows[0].farmer_id;
+      } else {
+        const fallbackFarmer = await client.query(
+          `SELECT farmer_id FROM farmer ORDER BY farmer_id ASC LIMIT 1`
+        );
+        if (fallbackFarmer.rows.length > 0) targetFarmerId = fallbackFarmer.rows[0].farmer_id;
+      }
+
+      if (targetFarmerId) {
+        const notiTitle = prediction === "DURIAN" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
+        const notiMessage = prediction === "DURIAN"
+          ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.`
+          : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
+        const notifResult = await client.query(
+          `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
+           VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
+          [detection_id, targetFarmerId, notiTitle, notiMessage, false]
+        );
+        notificationId = notifResult.rows[0].notification_id;
       }
     }
 
-    if (targetFarmerId) {
-      const notiTitle = prediction === "DURIAN" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
-      const notiMessage = prediction === "DURIAN" 
-        ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.` 
-        : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
-
-      // Masukkan ke table notification
-      const notifResult = await client.query(
-        `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING notification_id`,
-        [detection_id, targetFarmerId, notiTitle, notiMessage, false]
-      );
-      const newNotificationId = notifResult.rows[0].notification_id;
-      
-      // Masukkan ke push queue supaya notifikasi tolak (push) dihantar
-      await enqueueNotification(client, newNotificationId, targetFarmerId);
-      
+    if (notificationId) {
+      await enqueueNotification(client, notificationId, targetFarmerId);
       notificationCreated = true;
-      console.log(`  [NOTIFICATION] Created and queued successfully for farmer_id: ${targetFarmerId}`);
     } else {
-      console.warn(`  [NOTIFICATION WARNING] No farmer found to send notification for detection_id: ${detection_id}`);
+      console.warn(`  [NOTIFICATION WARNING] No farmer found for detection_id: ${detection_id}`);
     }
 
     await client.query("COMMIT");
