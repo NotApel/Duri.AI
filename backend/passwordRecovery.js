@@ -141,7 +141,7 @@ function createPasswordRecovery(
     } catch {
       if (client) await client.query("ROLLBACK").catch(() => {});
       return res.status(503).json({
-        error: "Your password could not be reset. Please try again later.",
+        error: "Unable to reset your password. Please try again.",
       });
     } finally {
       client?.release();

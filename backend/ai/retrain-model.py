@@ -4,7 +4,7 @@ import datetime
 import tensorflow as tf
 from supabase import create_client, Client
 
-print("🚀 Memulakan retrain AI di GitHub Actions...")
+print("Starting AI retraining on GitHub Actions...")
 
 # ============================================================
 # 1. SETUP SUPABASE & UPDATE FUNCTIONS
@@ -53,13 +53,13 @@ def download_folder_from_supabase(bucket_name, remote_folder, local_folder):
 # 2. MULA PROSES
 # ============================================================
 try:
-    update_db("training", "Memuat turun dataset...", 5)
+    update_db("training", "Downloading dataset...", 5)
     
     if os.path.exists(LOCAL_DATASET_DIR): shutil.rmtree(LOCAL_DATASET_DIR)
     download_folder_from_supabase("durian-dataset", "durian", LOCAL_DURIAN_DIR)
     download_folder_from_supabase("durian-dataset", "not-durian", LOCAL_NOT_DURIAN_DIR)
     
-    update_db("training", "Mula training AI...", 20)
+    update_db("training", "Starting AI training...", 20)
     
     IMG_SIZE = (128, 128) 
     BATCH_SIZE = 8 
@@ -94,12 +94,12 @@ try:
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
                   loss='binary_crossentropy', metrics=['accuracy'])
 
-    update_db("training", "Tengah train model...", 50)
+    update_db("training", "Training model...", 50)
     history = model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS)
     
     final_accuracy = history.history['val_accuracy'][-1] * 100
     print(f"Final Accuracy: {final_accuracy:.2f}%")
-    update_db("training", f"Siap train ({final_accuracy:.2f}%). Export TFLite...", 80)
+    update_db("training", f"Training complete ({final_accuracy:.2f}%). Exporting TFLite...", 80)
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -115,10 +115,10 @@ try:
         )
     
     model_url = supabase.storage.from_("durian-dataset").get_public_url("model_updated.tflite")
-    update_db("completed", "Model baru berjaya diupdate!", 100, model_url, final_accuracy)
-    print("✅ Selesai!")
+    update_db("completed", "Model updated successfully.", 100, model_url, final_accuracy)
+    print("Done.")
 
 except Exception as e:
-    print(f"❌ Error: {e}")
-    update_db("failed", f"Error: {str(e)}", 0)
+    print(f"Error: {e}")
+    update_db("failed", f"Failed to retrain the model: {str(e)}", 0)
     exit(1) # Bagi tahu GitHub Actions yang proses ni gagal

@@ -49,7 +49,7 @@ const route = (handler) => async (req, res) => {
       });
     console.error("API operation failed:", error.code || "UNKNOWN");
     res.status(503).json({
-      error: "The operation could not be completed. Please try again.",
+      error: "Unable to complete the operation. Please try again.",
     });
   }
 };

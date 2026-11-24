@@ -57,7 +57,7 @@ function createTrainingRoutes(pool, authenticate) {
     "/analytics/retrain-status",
     authenticate,
     route(async (_req, res) => {
-      if (!supabase) return fail(503, "Supabase not configured");
+      if (!supabase) return fail(503, "Supabase is not configured.");
       const { data } = await supabase.from('ai_status').select('*').eq('id', 1).single();
       res.json(data || { status: 'idle' });
     })
@@ -68,7 +68,7 @@ function createTrainingRoutes(pool, authenticate) {
     windowMs: 24 * 60 * 60 * 1000,
     limit: 10,
     keyGenerator: (req) => req.farmer.id,
-    message: { error: "Had retrain harian dah capai." },
+    message: { error: "Daily retrain limit reached." },
   });
 
   router.post(
@@ -76,11 +76,11 @@ function createTrainingRoutes(pool, authenticate) {
     authenticate,
     manualLimit,
     route(async (req, res) => {
-      if (!supabase) return fail(503, "Supabase not configured");
+      if (!supabase) return fail(503, "Supabase is not configured.");
 
       const { data: current } = await supabase.from('ai_status').select('status').eq('id', 1).single();
       if (current && (current.status === 'requested' || current.status === 'training')) {
-        return fail(409, "Retraining sedang berjalan atau sudah di-request.");
+        return fail(409, "Retraining is already running or has been requested.");
       }
 
       // Update status di Supabase
@@ -88,13 +88,13 @@ function createTrainingRoutes(pool, authenticate) {
         .from('ai_status')
         .update({ 
           status: 'requested', 
-          message: 'Menghantar arahan ke GitHub Actions...',
+          message: 'Sending request to GitHub Actions...',
           progress: 0,
           updated_at: new Date().toISOString()
         })
         .eq('id', 1);
 
-      if (error) return fail(500, "Gagal update Supabase: " + error.message);
+      if (error) return fail(500, "Failed to update Supabase: " + error.message);
 
       // Tembak API GitHub Actions
       try {
@@ -120,11 +120,11 @@ function createTrainingRoutes(pool, authenticate) {
           throw new Error(`GitHub API error: ${ghRes.status} - ${errorData.message || 'Unknown'}`);
         }
 
-        res.status(202).json({ message: "Arahan berjaya dihantar ke GitHub Actions!" });
+        res.status(202).json({ message: "Request sent to GitHub Actions." });
       } catch (err) {
         console.error("GitHub Trigger Error:", err.message);
-        await supabase.from('ai_status').update({ status: 'failed', message: 'Gagal trigger GitHub Actions.' }).eq('id', 1);
-        return fail(500, "Gagal trigger GitHub Actions: " + err.message);
+        await supabase.from('ai_status').update({ status: 'failed', message: 'Failed to trigger GitHub Actions.' }).eq('id', 1);
+        return fail(500, "Failed to trigger GitHub Actions: " + err.message);
       }
     })
   );

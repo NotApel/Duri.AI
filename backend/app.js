@@ -58,7 +58,7 @@ const deviceAuth = (req, res, next) => {
 
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== process.env.DEVICE_API_KEY) {
-    return res.status(401).json({ error: "Unauthorized: Invalid API Key" });
+    return res.status(401).json({ error: "Invalid API key." });
   }
   
   next();
@@ -96,7 +96,7 @@ app.get("/api/health", async (req, res) => {
   } catch {
     res
       .status(500)
-      .json({ status: "ERROR", message: "Database connection failed" });
+      .json({ status: "ERROR", message: "Database connection failed." });
   }
 });
 
@@ -110,7 +110,7 @@ app.get(["/api/farmer", "/api/farmers"], auth, async (req, res) => {
     );
     res.json(result.rows);
   } catch {
-    res.status(500).json({ error: "Failed to fetch farmers" });
+    res.status(500).json({ error: "Failed to fetch farmers." });
   }
 });
 
@@ -131,10 +131,10 @@ app.get(["/api/farmer/:id", "/api/farmers/:id"], auth, async (req, res) => {
       [req.params.id],
     );
     if (result.rows.length === 0)
-      return res.status(404).json({ error: "Farmer not found" });
+      return res.status(404).json({ error: "Farmer not found." });
     res.json(result.rows[0]);
   } catch {
-    res.status(500).json({ error: "Failed to fetch farmer" });
+    res.status(500).json({ error: "Failed to fetch farmer." });
   }
 });
 
@@ -175,7 +175,7 @@ app.get("/api/detections/:id/images", auth, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch detection images error:", err.message);
-    res.status(500).json({ error: "Failed to fetch detection images" });
+    res.status(500).json({ error: "Failed to fetch detection images." });
   }
 });
 
@@ -203,7 +203,7 @@ app.get(
       res.json(result.rows);
     } catch (error) {
       console.error("Get feedback categories error:", error);
-      res.status(500).json({ error: "Failed to fetch feedback categories" });
+      res.status(500).json({ error: "Failed to fetch feedback categories." });
     }
   },
 );
@@ -220,7 +220,7 @@ app.get(
       );
       res.json(result.rows);
     } catch {
-      res.status(500).json({ error: "Failed to fetch training queue" });
+      res.status(500).json({ error: "Failed to fetch training queue." });
     }
   },
 );
@@ -236,7 +236,7 @@ app.get(["/api/notification", "/api/notifications"], auth, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error("Get notification error:", error);
-    res.status(500).json({ error: "Failed to fetch notifications" });
+    res.status(500).json({ error: "Failed to fetch notifications." });
   }
 });
 
@@ -254,13 +254,13 @@ app.patch("/api/notifications/:notificationId/read", auth, async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Notification not found" });
+      return res.status(404).json({ error: "Notification not found." });
     }
 
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Mark read error:", error);
-    res.status(500).json({ error: "Failed to mark notification as read" });
+    res.status(500).json({ error: "Failed to mark notification as read." });
   }
 });
 
@@ -280,7 +280,7 @@ app.get("/api/analytics/stats", auth, async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch {
-    res.status(500).json({ error: "Failed to fetch stats" });
+    res.status(500).json({ error: "Failed to fetch stats." });
   }
 });
 
@@ -311,7 +311,7 @@ app.use(
         return res.status(404).json({ error: "Active node not found." });
       next();
     } catch {
-      res.status(503).json({ error: "Unable to check node availability." });
+      res.status(503).json({ error: "Unable to check node availability. Please try again." });
     }
   },
 );
@@ -323,7 +323,7 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
   try {
     const { node_id, amplitude, frequency, duration } = req.body;
     if (!node_id || amplitude === undefined || frequency === undefined)
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({ error: "Missing required fields." });
 
     const result = await pool.query(
       `INSERT INTO sensor_reading (node_id, amplitude, frequency, duration, recorded_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
@@ -331,9 +331,9 @@ app.post("/api/sensor-readings", deviceAuth, async (req, res) => {
     );
     res
       .status(201)
-      .json({ message: "Sensor reading saved", reading: result.rows[0] });
+      .json({ message: "Sensor reading saved.", reading: result.rows[0] });
   } catch {
-    res.status(500).json({ error: "Failed to save sensor reading" });
+    res.status(500).json({ error: "Failed to save sensor reading." });
   }
 });
 
@@ -343,7 +343,7 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
   try {
     const { node_id, prediction, confidence, image_base64 } = req.body;
     if (!node_id || !prediction || confidence === undefined)
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({ error: "Missing required fields." });
 
     client = await pool.connect();
     await client.query("BEGIN");
@@ -354,7 +354,7 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     );
     if (readingQuery.rows.length === 0) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: "No sensor reading found" });
+      return res.status(400).json({ error: "No sensor reading found." });
     }
 
     const reading_id = readingQuery.rows[0].reading_id;
@@ -377,12 +377,12 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
 
     await client.query("COMMIT");
     res.status(201).json({
-      message: "Detection processed",
+      message: "Detection processed.",
       detection: detectionResult.rows[0],
     });
   } catch {
     if (client) await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: "Failed to process detection" });
+    res.status(500).json({ error: "Failed to process detection." });
   } finally {
     client?.release();
   }
@@ -395,7 +395,7 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     const { node_id, amplitude, prediction, confidence, image_base64 } =
       req.body;
     if (!node_id || amplitude === undefined || !prediction)
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({ error: "Missing required fields." });
 
     client = await pool.connect();
     await client.query("BEGIN");
@@ -460,9 +460,9 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     );
     if (farmerQuery.rows.length > 0) {
       const farmerId = farmerQuery.rows[0].farmer_id;
-      const title = detection_status === "VERIFIED" ? "Durian Detected!" : "New detection received";
+      const title = detection_status === "VERIFIED" ? "Durian detected!" : "New detection received";
       const message = detection_status === "VERIFIED"
-        ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.`
+        ? `Falling durian detected with ${confidence}% confidence.`
         : `New event received (${detection_status}). Open it to review and give feedback.`;
       const notifResult = await client.query(
         `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
@@ -476,7 +476,7 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     }
     await client.query("COMMIT");
     res.status(201).json({
-      message: "Fusion processed",
+      message: "Fusion processed.",
       fusion_result: {
         detection_id,
         vibration_amplitude: amplitude,
@@ -488,7 +488,7 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
   } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("Fusion Error:", err);
-    res.status(500).json({ error: "Failed to process sensor fusion" });
+    res.status(500).json({ error: "Failed to process sensor fusion." });
   } finally {
     client?.release();
   }
@@ -567,7 +567,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
           [detection_id, publicUrl, i + 1, i === 0]
         );
       } else {
-        console.error("Gagal upload gambar:", storageError.message);
+        console.error("Failed to upload image:", storageError.message);
       }
     }
 
@@ -597,10 +597,10 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     }
 
     if (targetFarmerId) {
-      const notiTitle = prediction === "DURIAN" ? "Durian Detected! 🍈" : "New Harvest Event 🚨";
+      const notiTitle = prediction === "DURIAN" ? "Durian detected!" : "New detection received";
       const notiMessage = prediction === "DURIAN"
-        ? `Durian jatuh dikesan dengan ${confidence}% keyakinan.`
-        : `Aktiviti getaran/pengesanan baharu direkodkan pada node ${activeNodeId}.`;
+        ? `Falling durian detected with ${confidence}% confidence.`
+        : `New vibration/detection activity recorded on node ${activeNodeId}.`;
       const notifResult = await client.query(
         `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
          VALUES ($1, $2, $3, $4, $5)
@@ -617,7 +617,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     await client.query("COMMIT");
 
     res.status(201).json({
-      message: "Event processed successfully",
+      message: "Event processed successfully.",
       detection_id: detection_id,
       notification_triggered: notificationCreated,
       images_uploaded: image_urls.length
@@ -626,7 +626,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
   } catch (err) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("Bridge Error:", err);
-    res.status(500).json({ error: "Failed to process event", details: err.message });
+    res.status(500).json({ error: "Failed to process event.", details: err.message });
   } finally {
     client?.release();
   }
@@ -643,15 +643,15 @@ app.post("/api/test-push", auth, async (req, res) => {
     );
 
     if (subResult.rows.length === 0) {
-      return res.status(404).json({ error: "Tiada peranti yang melanggan push notification untuk akaun ini." });
+      return res.status(404).json({ error: "No devices are subscribed to push notifications for this account." });
     }
 
     const sub = subResult.rows[0];
 
     const webPush = require("web-push");
     const pushPayload = JSON.stringify({
-      title: "Ujian Duri.AI! 🍈",
-      body: "Berjaya! Notifikasi pop-up anda berfungsi dengan cemerlang.",
+      title: "Duri.AI test!",
+      body: "Success! Your pop-up notifications are working perfectly.",
       url: "/map",
     });
 
@@ -672,16 +672,16 @@ app.post("/api/test-push", auth, async (req, res) => {
       pushOptions
     );
 
-    res.json({ success: true, message: "Notifikasi ujian berjaya dihantar ke pelayar web anda!" });
+    res.json({ success: true, message: "Test notification sent to your web browser successfully!" });
   } catch (error) {
     console.error("Test push error:", error);
-    res.status(500).json({ error: "Gagal menghantar notifikasi ujian", details: error.message });
+    res.status(500).json({ error: "Failed to send test notification.", details: error.message });
   }
 });
 
 // 404 NOT FOUND & ERROR HANDLER
 app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
+  res.status(404).json({ error: "Route not found." });
 });
 
 app.use((err, req, res, next) => {
@@ -694,7 +694,7 @@ app.use((err, req, res, next) => {
         ? "Request payload is too large."
         : status === 400
           ? "Invalid request body."
-          : "The server could not complete the request.",
+          : "Failed to complete the request.",
   });
 });
 
