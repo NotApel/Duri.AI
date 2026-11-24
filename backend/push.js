@@ -267,7 +267,7 @@ function createPushWorker(
       await pool.query(
         `SELECT s.*,n.detection_id FROM push_delivery d
       JOIN push_subscription s ON s.subscription_id=d.subscription_id JOIN notification n ON n.notification_id=d.notification_id
-      JOIN detection event_record ON event_record.detection_id=n.detection_id AND event_record.detection_status='VERIFIED'
+      JOIN detection event_record ON event_record.detection_id=n.detection_id AND event_record.detection_status IN ('VERIFIED','PENDING')
       JOIN farmer_session fs ON fs.token_hash=s.session_token_hash AND fs.farmer_id=s.farmer_id
       WHERE d.delivery_id=$1 AND d.lease_id=$2 AND s.farmer_id=n.farmer_id AND fs.expires_at>NOW()`,
         [job.delivery_id, job.lease_id],

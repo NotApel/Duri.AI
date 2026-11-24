@@ -18,6 +18,7 @@ const enabled = process.env.PUSH_ENABLED === "true"; // Betulkan dari env kepada
 const pool = require("./db");
 const { createStorage } = require("./storage");
 const { createPushRoutes, createPushWorker, pushConfig, enqueueNotification } = require("./push");
+const { classify } = require("./detectionPolicy");
 const { createProcessedEventRoutes } = require("./processedEvents");
 
 const storage = createStorage();
@@ -396,6 +397,13 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
       req.body;
     if (!node_id || amplitude === undefined || !prediction)
       return res.status(400).json({ error: "Missing required fields." });
+    if (
+      !["DURIAN", "NOT_DURIAN"].includes(String(prediction).toUpperCase()) ||
+      !Number.isFinite(Number(confidence))
+    )
+      return res
+        .status(400)
+        .json({ error: "Prediction and confidence are required." });
 
     client = await pool.connect();
     await client.query("BEGIN");
@@ -407,27 +415,9 @@ app.post("/api/fusion-event", deviceAuth, async (req, res) => {
     );
     const reading_id = readingResult.rows[0].reading_id;
 
-    const CONFIDENCE_THRESHOLD = 90.0;
-
-    let detection_status = "PENDING";
-    let verify_required = true;
-
-    if (
-      prediction.toUpperCase() === "DURIAN" &&
-      confidence >= CONFIDENCE_THRESHOLD
-    ) {
-      detection_status = "VERIFIED";
-      verify_required = false;
-    } else if (
-      prediction.toUpperCase() !== "DURIAN" &&
-      confidence >= CONFIDENCE_THRESHOLD
-    ) {
-      detection_status = "REJECTED";
-      verify_required = false;
-    } else {
-      detection_status = "PENDING";
-      verify_required = true;
-    }
+    const outcome = classify(prediction.toUpperCase(), Number(confidence));
+    const detection_status = outcome.status;
+    const verify_required = outcome.verifyRequired;
 
     let image_urls = [];
     if (image_base64) {
@@ -509,16 +499,20 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     const activeNodeId = node_id ? parseInt(node_id, 10) : 1;
     const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0.0;
     
-    // Guna prediction yang dihantar client, atau default ke DURIAN jika tiada
-    const prediction = clientPrediction ? clientPrediction.toUpperCase() : "DURIAN"; 
-    const confidence = clientConfidence !== undefined ? parseFloat(clientConfidence) : 95.0;     
-    
-    let detection_status = "VERIFIED";
-    let verify_required = false;
+    // Prediction and confidence must come from the AI. Never invent them.
+    const prediction = String(clientPrediction || "").toUpperCase();
+    const confidence = parseFloat(clientConfidence);
+    if (
+      !["DURIAN", "NOT_DURIAN"].includes(prediction) ||
+      !Number.isFinite(confidence)
+    )
+      return res
+        .status(400)
+        .json({ error: "Prediction and confidence are required." });
 
-    if (prediction !== "DURIAN") {
-      detection_status = "REJECTED";
-    }
+    const outcome = classify(prediction, confidence);
+    const detection_status = outcome.status;
+    const verify_required = outcome.verifyRequired;
 
     client = await pool.connect();
     await client.query("BEGIN");

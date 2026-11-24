@@ -2,6 +2,7 @@ const { Router, json } = require("express");
 const rateLimit = require("express-rate-limit");
 const { createDeviceAuth } = require("./deviceAuth");
 const { validateEvent } = require("./eventValidation");
+const { classify } = require("./detectionPolicy");
 const { route, transaction, fail } = require("./apiHelpers");
 const { enqueueNotification } = require("./push");
 function createProcessedEventRoutes(pool, storage) {
@@ -11,7 +12,7 @@ function createProcessedEventRoutes(pool, storage) {
     limit: 120,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many device requests. Retry shortly." },
+    message: { error: "Too many device requests. Please try again shortly." },
   });
   const gatewayLimiter = rateLimit({
     windowMs: 60000,
@@ -32,6 +33,9 @@ function createProcessedEventRoutes(pool, storage) {
     route(async (req, res) => {
       const event = validateEvent(req.body),
         device = req.device;
+      // The AI reports a prediction and confidence; the backend decides the status.
+      const { prediction, confidence } = event.evidence.camera;
+      const outcome = classify(prediction, confidence);
       if (
         req.headers["x-duriai-simulation"] === "true" &&
         !device.is_simulation
@@ -134,10 +138,13 @@ function createProcessedEventRoutes(pool, storage) {
         ).rows[0];
         const detection = (
           await client.query(
-            "INSERT INTO detection(reading_id,prediction,confidence,verify_required,detection_status,detection_at) VALUES ($1,'DURIAN',$2,FALSE,'VERIFIED',$3) RETURNING detection_id",
+            "INSERT INTO detection(reading_id,prediction,confidence,verify_required,detection_status,detection_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING detection_id",
             [
               reading.reading_id,
-              event.evidence.camera.confidence,
+              prediction,
+              confidence,
+              outcome.verifyRequired,
+              outcome.status,
               event.evidence.occurred_at,
             ],
           )
@@ -156,24 +163,36 @@ function createProcessedEventRoutes(pool, storage) {
               saved.image.captured_at,
             ],
           );
-        const notification = (
-          await client.query(
-            "INSERT INTO notification(detection_id,farmer_id,title,message_noti) VALUES ($1,$2,$3,$4) ON CONFLICT (detection_id) DO UPDATE SET title=EXCLUDED.title, message_noti=EXCLUDED.message_noti RETURNING notification_id",
-            [
-              detection.detection_id,
-              device.farmer_id,
-              device.is_simulation
-                ? "Simulated harvest event"
-                : "Confirmed harvest event",
-              `${device.is_simulation ? "Simulation · " : ""}${node.node_name} · reported ${event.evidence.occurred_at}. Open the event to review its evidence.`,
-            ],
-          )
-        ).rows[0];
-        const pushJobs = await enqueueNotification(
-          client,
-          notification.notification_id,
-          device.farmer_id,
-        );
+        // A confident NOT_DURIAN is a filtered false trigger, so no alert is sent.
+        // A confident DURIAN alerts the farmer, and an unsure result asks for review.
+        let notification = null;
+        let pushJobs = 0;
+        if (outcome.status !== "REJECTED") {
+          const needsReview = outcome.status === "PENDING";
+          const title = needsReview
+            ? device.is_simulation
+              ? "Simulated detection needs review"
+              : "Detection needs review"
+            : device.is_simulation
+              ? "Simulated harvest event"
+              : "Confirmed harvest event";
+          notification = (
+            await client.query(
+              "INSERT INTO notification(detection_id,farmer_id,title,message_noti) VALUES ($1,$2,$3,$4) ON CONFLICT (detection_id) DO UPDATE SET title=EXCLUDED.title, message_noti=EXCLUDED.message_noti RETURNING notification_id",
+              [
+                detection.detection_id,
+                device.farmer_id,
+                title,
+                `${device.is_simulation ? "Simulation · " : ""}${node.node_name} · reported ${event.evidence.occurred_at}. Open the event to review its evidence.`,
+              ],
+            )
+          ).rows[0];
+          pushJobs = await enqueueNotification(
+            client,
+            notification.notification_id,
+            device.farmer_id,
+          );
+        }
         // Receiving a new event proves connectivity, not battery level or position.
         await client.query(
           "UPDATE sensor_node SET status='ONLINE',last_ping_at=NOW() WHERE node_id=$1",
@@ -185,13 +204,13 @@ function createProcessedEventRoutes(pool, storage) {
             device.gateway_id,
             event.evidence.source_event_id,
             detection.detection_id,
-            notification.notification_id,
+            notification?.notification_id ?? null,
           ],
         );
         return {
           duplicate: false,
           detection_id: detection.detection_id,
-          notification_id: notification.notification_id,
+          notification_id: notification?.notification_id ?? null,
           push_jobs_created: pushJobs,
         };
       });

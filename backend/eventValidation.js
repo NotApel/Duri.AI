@@ -102,19 +102,16 @@ function validateEvent(body) {
     !uuidPattern.test(body.source_event_id)
   )
     fail(400, "A stable source_event_id UUID is required for retries.");
-  if (
-    body.decision !== "CONFIRMED_HARVEST" ||
-    body.vibration?.detected !== true ||
-    body.camera?.prediction !== "DURIAN"
-  )
-    fail(
-      400,
-      "Confirmed harvests require agreeing vibration and camera evidence.",
-    );
+  // An event starts with a vibration trigger. The AI then labels the images as
+  // DURIAN or NOT_DURIAN with a confidence; the backend decides the status.
+  if (body.vibration?.detected !== true)
+    fail(400, "A vibration trigger is required.");
+  if (!["DURIAN", "NOT_DURIAN"].includes(body.camera?.prediction))
+    fail(400, "Camera prediction must be DURIAN or NOT_DURIAN.");
   const confidence = number(
     body.camera.confidence,
     "Camera confidence (%)",
-    90,
+    0,
     100,
   );
   const optional = (value, label) =>
@@ -135,7 +132,7 @@ function validateEvent(body) {
     body.images.length < 1 ||
     body.images.length > 5
   )
-    fail(400, "Confirmed harvests need 1–5 captured images.");
+    fail(400, "Events need 1–5 captured images.");
   const images = body.images
     .map(decodeImage)
     .sort((a, b) => a.sequence_number - b.sequence_number);
@@ -160,7 +157,6 @@ function validateEvent(body) {
     source_event_id: body.source_event_id.toLowerCase(),
     node_id: requireId(body.node_id),
     occurred_at: timestamp(body.occurred_at, "Event time"),
-    decision: body.decision,
     vibration: {
       detected: true,
       amplitude,
@@ -172,7 +168,7 @@ function validateEvent(body) {
       ),
     },
     camera: {
-      prediction: "DURIAN",
+      prediction: body.camera.prediction,
       confidence,
       model_version: body.camera.model_version?.trim() || null,
     },
