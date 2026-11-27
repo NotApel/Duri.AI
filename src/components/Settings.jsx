@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Save } from "lucide-react";
 import PushSettings from "./PushSettings";
+// Keep in sync with CONFIDENCE_THRESHOLD in the backend (.env, default 90).
+const CONFIDENCE_THRESHOLD = 90;
 export default function Settings() {
   const [saved, setSaved] = useState(false);
   return (
@@ -9,9 +11,21 @@ export default function Settings() {
         <h1>Settings</h1>
       </header>
       <PushSettings />
+      <section
+        className="ui-panel"
+        aria-labelledby="detection-threshold-heading"
+      >
+        <h2 id="detection-threshold-heading">
+          Detection confidence threshold: {CONFIDENCE_THRESHOLD}%
+        </h2>
+        <p className="ui-setting-description">
+          Detections below {CONFIDENCE_THRESHOLD}% confidence are marked for
+          your review. Your feedback helps improve the model.
+        </p>
+      </section>
       <p className="ui-notice">
-        The preferences below are demonstrations only. Offline record
-        synchronization and model threshold changes are not connected.
+        The preference below is a demonstration only. Offline record
+        synchronization is not connected.
       </p>
       <form
         className="ui-panel ui-form settings-grid"
@@ -30,14 +44,6 @@ export default function Settings() {
             </span>
           </span>
           <input id="offline-cache" type="checkbox" defaultChecked />
-        </label>
-        <label className="ui-field" htmlFor="confidence-threshold">
-          Demo confidence threshold
-          <select id="confidence-threshold" defaultValue="85">
-            <option value="85">Above 85%</option>
-            <option value="90">Above 90%</option>
-            <option value="95">Above 95%</option>
-          </select>
         </label>
         <div>
           <button className="ui-button primary">
