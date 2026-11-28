@@ -2,6 +2,10 @@ name: Duri.AI Retraining Pipeline
 
 on:
   workflow_dispatch:
+  schedule:
+    # Every Sunday at 00:00 UTC. Matches the schedule shown on the
+    # Training History page (weekly_schedule in trainingRoutes.js).
+    - cron: '0 0 * * 0'
 
 jobs:
   train:

@@ -27,6 +27,8 @@ function createTrainingRoutes(pool, authenticate) {
       let cloudStatus = "idle";
       let currentAccuracy = null;
       let lastRetrained = null;
+      let statusMessage = null;
+      let statusUpdatedAt = null;
 
       if (supabase) {
         const { data } = await supabase.from('ai_status').select('*').eq('id', 1).single();
@@ -34,19 +36,30 @@ function createTrainingRoutes(pool, authenticate) {
           cloudStatus = data.status;
           currentAccuracy = data.accuracy;
           lastRetrained = data.last_retrained;
+          statusMessage = data.message || null;
+          statusUpdatedAt = data.updated_at || null;
         }
       }
 
+      const pendingCount = pending.rows[0].count;
+      // The farmer has queued feedback but no retrain is running or requested yet.
+      const waitingForRetrain = pendingCount > 0 && cloudStatus === "idle";
+
       res.json({
         totalCorrections: corrections.rows[0].count,
-        pendingTraining: pending.rows[0].count,
+        pendingTraining: pendingCount,
         evaluations: [],
         currentAccuracy: (currentAccuracy !== null && currentAccuracy !== undefined) ? `${Number(currentAccuracy).toFixed(2)}%` : 'Unavailable',
         accuracyHistory: [], 
         lastRetrained: lastRetrained ? new Date(lastRetrained).toLocaleDateString() : 'Not yet retrained',
         retraining_available: true,
-        worker: { status: cloudStatus }, 
-        weekly_schedule: null,
+        waiting_for_retrain: waitingForRetrain,
+        worker: {
+          status: cloudStatus,
+          message: statusMessage,
+          updated_at: statusUpdatedAt,
+        },
+        weekly_schedule: "Every Sunday at 00:00 UTC",
         evaluation_note: "Training is securely handled via GitHub Actions & Supabase Storage.",
       });
     })

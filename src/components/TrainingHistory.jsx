@@ -12,16 +12,25 @@ import {
 import { fetchTraining, retrain } from "../services/api";
 import { normalizeTraining } from "../services/trainingData";
 import { farmDate } from "../services/farmData";
+// Backend status values come from the ai_status table: idle, requested,
+// training, completed, failed. "Waiting for Retraining" is not a backend
+// status; it is shown when feedback is queued but no run has started yet.
 const workerLabels = {
-  idle: "No training run recorded in this backend process",
-  processing: "Training script is running · progress unavailable",
-  success: "Training script finished · evaluation and deployment unverified",
-  failed: "Training script failed",
+  idle: "No training run recorded yet.",
+  waiting: "Waiting for Retraining",
+  requested: "Retrain requested · waiting for the worker to start.",
+  training: "Training in progress.",
+  completed: "Last training run completed.",
+  failed: "Training script failed.",
 };
+const ACTIVE_STATUSES = ["requested", "training"];
 export default function TrainingHistory() {
   const [result, setResult] = useState({
     stats: null,
     worker: null,
+    lastRetrained: null,
+    schedule: null,
+    waiting: false,
     available: false,
     loading: true,
     error: "",
@@ -41,6 +50,9 @@ export default function TrainingHistory() {
         setResult({
           stats,
           worker: data.worker || null,
+          lastRetrained: data.lastRetrained || null,
+          schedule: data.weekly_schedule || null,
+          waiting: data.waiting_for_retrain === true,
           available: data.retraining_available === true,
           loading: false,
           error: "",
@@ -61,7 +73,7 @@ export default function TrainingHistory() {
       active.current?.abort();
     };
   }, [loadStats]);
-  const processing = result.worker?.status === "processing";
+  const processing = ACTIVE_STATUSES.includes(result.worker?.status);
   useEffect(() => {
     if (!processing) return;
     const timer = setInterval(loadStats, 3000);
@@ -75,11 +87,6 @@ export default function TrainingHistory() {
     try {
       const response = await retrain();
       setMessage(response.message);
-      try {
-        localStorage.setItem("isRetraining", "true");
-      } catch {
-        /* Server state remains authoritative. */
-      }
       await loadStats();
     } catch (error) {
       setMessage("");
@@ -89,7 +96,10 @@ export default function TrainingHistory() {
       setSubmitting(false);
     }
   }
-  const { stats, worker, error } = result;
+  const { stats, worker, waiting, error } = result;
+  // "Waiting for Retraining" only applies when nothing is already running.
+  const statusKey = !processing && waiting ? "waiting" : worker?.status;
+  const statusLabel = workerLabels[statusKey] || "Training worker status unavailable.";
   if (result.loading)
     return (
       <p className="ui-notice" role="status">
@@ -121,11 +131,16 @@ export default function TrainingHistory() {
             {submitting
               ? "Starting…"
               : processing
-                ? "Training script running…"
-                : "Retrain AI Now"}
+                ? "Training in progress…"
+                : "Force Retrain Now"}
           </button>
         </div>
       </header>
+      <p className="ui-notice">
+        {result.schedule
+          ? `The AI automatically retrains every Sunday (${result.schedule}). Click to force an immediate update.`
+          : "The AI automatically retrains every Sunday. Click to force an immediate update."}
+      </p>
       {error && (
         <p className="ui-notice ui-error" role="alert">
           {error} {stats ? "Displayed data may be stale." : ""}{" "}
@@ -158,13 +173,13 @@ export default function TrainingHistory() {
           <dt>Current AI Accuracy</dt>
           <dd>
             {stats?.accuracy !== null && stats?.accuracy !== undefined
-              ? `${stats.accuracy}%`
+              ? `${stats.accuracy}%${stats.accuracyVerified ? "" : " (self-reported)"}`
               : "Unavailable"}
           </dd>
         </div>
         <div>
-          <dt>Latest evaluation</dt>
-          <dd>{farmDate(stats?.lastEvaluated)}</dd>
+          <dt>Last AI training</dt>
+          <dd>{result.lastRetrained || "Not yet retrained"}</dd>
         </div>
       </dl>
       <section className="ui-panel mt-6">
@@ -199,17 +214,17 @@ export default function TrainingHistory() {
       <section className="ui-panel mt-6">
         <h2>Model Status</h2>
         <p role="status" className="mt-2">
-          {workerLabels[worker?.status] || "Training worker status unavailable"}
+          {statusLabel}
         </p>
-        {worker?.error && (
+        {worker?.message && (
+          <p className="ui-muted mt-2">{worker.message}</p>
+        )}
+        {worker?.status === "failed" && worker?.message && (
           <p className="ui-notice ui-error" role="alert">
-            {worker.error}
+            {worker.message}
           </p>
         )}
-        <p className="mt-2">
-          Started: {farmDate(worker?.started_at)} · Finished:{" "}
-          {farmDate(worker?.finished_at)}
-        </p>
+        <p className="mt-2">Last updated: {farmDate(worker?.updated_at)}</p>
         <p className="ui-muted mt-2">
           Worker status is reset when the backend restarts. Queued feedback
           remains pending until a verified training pipeline records its

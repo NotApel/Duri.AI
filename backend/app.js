@@ -19,6 +19,7 @@ const pool = require("./db");
 const { createStorage } = require("./storage");
 const { createPushRoutes, createPushWorker, pushConfig, enqueueNotification } = require("./push");
 const { classify } = require("./detectionPolicy");
+const { runInference } = require("./aiInference");
 const { createProcessedEventRoutes } = require("./processedEvents");
 
 const storage = createStorage();
@@ -345,6 +346,14 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
     const { node_id, prediction, confidence, image_base64 } = req.body;
     if (!node_id || !prediction || confidence === undefined)
       return res.status(400).json({ error: "Missing required fields." });
+    if (
+      !["DURIAN", "NOT_DURIAN"].includes(String(prediction).toUpperCase()) ||
+      !Number.isFinite(Number(confidence))
+    )
+      return res
+        .status(400)
+        .json({ error: "Prediction and confidence are required." });
+    const outcome = classify(String(prediction).toUpperCase(), Number(confidence));
 
     client = await pool.connect();
     await client.query("BEGIN");
@@ -373,7 +382,14 @@ app.post("/api/device/detections", deviceAuth, async (req, res) => {
 
     const detectionResult = await client.query(
       `INSERT INTO detection (reading_id, prediction, confidence, verify_required, detection_status, detection_at, image_urls) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
-      [reading_id, prediction.toUpperCase(), confidence, false, "PENDING", image_urls],
+      [
+        reading_id,
+        prediction.toUpperCase(),
+        confidence,
+        outcome.verifyRequired,
+        outcome.status,
+        image_urls,
+      ],
     );
 
     await client.query("COMMIT");
@@ -499,16 +515,30 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     const activeNodeId = node_id ? parseInt(node_id, 10) : 1;
     const parsedAmplitude = amplitude ? parseFloat(amplitude) : 0.0;
     
-    // Prediction and confidence must come from the AI. Never invent them.
-    const prediction = String(clientPrediction || "").toUpperCase();
-    const confidence = parseFloat(clientConfidence);
+    // The bridge only uploads images and vibration. The AI model reads the images
+    // and returns the prediction and confidence. Never invent them. A result sent
+    // by the bridge is used only when it is complete.
+    let prediction = String(clientPrediction || "").toUpperCase();
+    let confidence = parseFloat(clientConfidence);
     if (
       !["DURIAN", "NOT_DURIAN"].includes(prediction) ||
       !Number.isFinite(confidence)
-    )
-      return res
-        .status(400)
-        .json({ error: "Prediction and confidence are required." });
+    ) {
+      if (!imageFiles.length)
+        return res
+          .status(400)
+          .json({ error: "At least one image is required." });
+      try {
+        ({ prediction, confidence } = await runInference(
+          imageFiles.map((file) => file.buffer),
+        ));
+      } catch (error) {
+        console.error("AI inference failed:", error.message);
+        return res
+          .status(503)
+          .json({ error: "Unable to analyze the images. Please try again." });
+      }
+    }
 
     const outcome = classify(prediction, confidence);
     const detection_status = outcome.status;
@@ -590,11 +620,13 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       if (fallbackFarmer.rows.length > 0) targetFarmerId = fallbackFarmer.rows[0].farmer_id;
     }
 
-    if (targetFarmerId) {
-      const notiTitle = prediction === "DURIAN" ? "Durian detected!" : "New detection received";
-      const notiMessage = prediction === "DURIAN"
-        ? `Falling durian detected with ${confidence}% confidence.`
-        : `New vibration/detection activity recorded on node ${activeNodeId}.`;
+    // A confident NOT_DURIAN is a filtered false trigger, so no alert is sent.
+    if (targetFarmerId && outcome.status !== "REJECTED") {
+      const needsReview = outcome.status === "PENDING";
+      const notiTitle = needsReview ? "Detection needs review" : "Durian detected!";
+      const notiMessage = needsReview
+        ? `The AI is not sure about this event (${confidence}% confidence). Open it to review and give feedback.`
+        : `Falling durian detected with ${confidence}% confidence.`;
       const notifResult = await client.query(
         `INSERT INTO notification (detection_id, farmer_id, title, message_noti, is_read)
          VALUES ($1, $2, $3, $4, $5)
@@ -604,7 +636,7 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
       );
       await enqueueNotification(client, notifResult.rows[0].notification_id, targetFarmerId);
       notificationCreated = true;
-    } else {
+    } else if (!targetFarmerId) {
       console.warn(`  [NOTIFICATION WARNING] No farmer found for detection_id: ${detection_id}`);
     }
 
@@ -613,6 +645,9 @@ app.post('/api/upload-event', deviceAuth, upload.array('images', 5), async (req,
     res.status(201).json({
       message: "Event processed successfully.",
       detection_id: detection_id,
+      prediction,
+      confidence,
+      detection_status,
       notification_triggered: notificationCreated,
       images_uploaded: image_urls.length
     });
